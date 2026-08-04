@@ -1,0 +1,44 @@
+Zotero Search Bridge 便携版（免安装）
+=====================================
+
+包含
+----
+- zsb-desktop.exe   桌面托盘程序（双击运行，状态页/设置页/自动同步）
+- zsb.exe           命令行工具（搜索、同步、诊断、维护）
+- 说明.txt          本文件
+
+快速开始
+--------
+1. 启动 Zotero，并在 Zotero 中确认：
+   设置 → 高级 → 允许此计算机上的其他应用程序与 Zotero 通信。
+2. 双击 zsb-desktop.exe，程序最小化到系统托盘并自动开始同步；
+   右键托盘图标可“显示主窗口 / 立即同步 / 暂停同步 / 退出”。
+3. 命令行用法（在终端中）：
+     zsb.exe doctor                 环境诊断
+     zsb.exe sync                   立即同步
+     zsb.exe search "燃气轮机"      本地搜索（Zotero 关闭时也可用）
+     zsb.exe search "author:Smith year:2024" --format json
+     zsb.exe open --library user --key N49R8KAQ
+     zsb.exe status                 查看索引状态
+
+Listary 集成
+------------
+把以下镜像目录加入 Listary 索引，即可按 作者/年份/标题 搜索并双击定位：
+  %LOCALAPPDATA%\ZoteroSearchBridge\mirrors\windows\
+也可在托盘程序“设置”页把镜像目录改到你已有的 Listary 索引目录。
+
+数据位置
+--------
+配置：%APPDATA%\ZoteroSearchBridge\config.toml
+索引：%LOCALAPPDATA%\ZoteroSearchBridge\data\index.sqlite
+日志：%LOCALAPPDATA%\ZoteroSearchBridge\logs\zsb.log
+
+说明：便携版不写入注册表、不创建开始菜单项；但配置与索引仍保存在
+上述用户目录中（删除这两个目录即可完全卸载所有数据）。
+
+自定义数据位置（可选）
+--------------------
+zsb.exe 支持 --config 和 --database 参数指定配置与索引路径，例如：
+  zsb.exe --config D:\zsb\config.toml --database D:\zsb\index.sqlite sync
+
+版本：v0.1.0（2026-08-04 构建）

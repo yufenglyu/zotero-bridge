@@ -4,3 +4,4 @@
 node_modules/
 apps/desktop/dist/
 smoke_screen.png
+/dist-portable/*.exe
