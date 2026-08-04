@@ -1,0 +1,7 @@
+# Zotero Search Bridge 便携配置
+# 本文件与 exe 放在同一目录时即启用便携模式：
+# 索引数据库默认保存在 exe 旁的 data\index.sqlite。
+# 如需自定义数据库位置，取消下面一行的注释并修改（支持 %VAR% 和 ~）：
+
+# [storage]
+# database = "D:\\zsb\\index.sqlite"

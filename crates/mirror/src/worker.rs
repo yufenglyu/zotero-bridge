@@ -23,11 +23,7 @@ pub struct WorkerReport {
 }
 
 /// Process pending mirror jobs for one platform.
-pub fn process_pending(
-    db: &Database,
-    platform: Platform,
-    limit: u32,
-) -> Result<WorkerReport> {
+pub fn process_pending(db: &Database, platform: Platform, limit: u32) -> Result<WorkerReport> {
     let jobs = db.pending_jobs(platform, limit)?;
     let mut report = WorkerReport::default();
     for job in jobs {
@@ -35,7 +31,11 @@ pub fn process_pending(
             Ok(()) => {
                 db.complete_job(job.id)?;
                 report.completed += 1;
-                debug!(job = job.id, op = job.operation.as_str(), "mirror job completed");
+                debug!(
+                    job = job.id,
+                    op = job.operation.as_str(),
+                    "mirror job completed"
+                );
             }
             Err(e) => {
                 warn!(job = job.id, error = %e, "mirror job failed");
@@ -88,11 +88,7 @@ fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension(format!(
-        "zsb-{}-{}.tmp",
-        std::process::id(),
-        now_millis()
-    ));
+    let tmp = path.with_extension(format!("zsb-{}-{}.tmp", std::process::id(), now_millis()));
     fs::write(&tmp, content)?;
     if path.exists() {
         // Windows cannot rename over an existing file.
@@ -123,10 +119,8 @@ mod tests {
     use zsb_core::{NewMirrorJob, SyncBatch};
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "zsb-mirror-test-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("zsb-mirror-test-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -213,7 +207,9 @@ mod tests {
                     platform: Platform::Windows,
                     old_path: None,
                     new_path: Some(path.to_string_lossy().into_owned()),
-                    content: Some("[InternetShortcut]\r\nURL=zotero://select/library/items/K9\r\n".into()),
+                    content: Some(
+                        "[InternetShortcut]\r\nURL=zotero://select/library/items/K9\r\n".into(),
+                    ),
                 }],
                 new_version: 1,
             },

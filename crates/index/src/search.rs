@@ -130,9 +130,10 @@ pub fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<SearchResult
     let mut eq_params: Vec<Box<dyn ToSql>> = Vec::new();
 
     // Push one LIKE condition over `columns`, binding the value once per column.
-    let push_like = |columns: &[&str], value: &str,
-                         like_conds: &mut Vec<String>,
-                         like_params: &mut Vec<Box<dyn ToSql>>| {
+    let push_like = |columns: &[&str],
+                     value: &str,
+                     like_conds: &mut Vec<String>,
+                     like_params: &mut Vec<Box<dyn ToSql>>| {
         like_conds.push(like_clause(columns));
         for _ in columns {
             like_params.push(Box::new(like_escape(value)));
@@ -178,8 +179,7 @@ pub fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<SearchResult
                 }
                 FieldScope::Tag => {
                     if char_len(value) >= TRIGRAM_MIN {
-                        fts_clauses
-                            .push(format!("tags : \"{}\"", fts_escape(value)));
+                        fts_clauses.push(format!("tags : \"{}\"", fts_escape(value)));
                     } else {
                         push_like(&["i.tags"], value, &mut like_conds, &mut like_params);
                     }
@@ -244,7 +244,9 @@ pub fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<SearchResult
     bound.extend(eq_params);
     bound.push(Box::new(limit));
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| Error::Query(e.to_string()))?;
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| Error::Query(e.to_string()))?;
     let rows = stmt
         .query_map(params_from_iter(bound.iter().map(|p| p.as_ref())), |row| {
             let kind: String = row.get(1)?;
@@ -289,29 +291,22 @@ mod tests {
             .upsert_library("test-server", &RemoteLibrary::user())
             .unwrap();
 
-        let item = |key: &str, title: &str, creators: &str, year: &str, tags: &str| {
-            IndexedItem {
-                library_id: lib_id,
-                item_key: key.into(),
-                item_version: 1,
-                item_type: "journalArticle".into(),
-                title: title.into(),
-                creators: creators.into(),
-                primary_creator: creators
-                    .split(';')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string(),
-                year: year.into(),
-                container_title: "Journal of Turbomachinery".into(),
-                tags: tags.into(),
-                abstract_note: "deep study of rotor dynamics".into(),
-                extra: String::new(),
-                select_uri: build_select_uri(LibraryKind::User, "0", key),
-                content_hash: key.into(),
-                ..Default::default()
-            }
+        let item = |key: &str, title: &str, creators: &str, year: &str, tags: &str| IndexedItem {
+            library_id: lib_id,
+            item_key: key.into(),
+            item_version: 1,
+            item_type: "journalArticle".into(),
+            title: title.into(),
+            creators: creators.into(),
+            primary_creator: creators.split(';').next().unwrap_or("").trim().to_string(),
+            year: year.into(),
+            container_title: "Journal of Turbomachinery".into(),
+            tags: tags.into(),
+            abstract_note: "deep study of rotor dynamics".into(),
+            extra: String::new(),
+            select_uri: build_select_uri(LibraryKind::User, "0", key),
+            content_hash: key.into(),
+            ..Default::default()
         };
 
         let mut db = db;
@@ -319,9 +314,27 @@ mod tests {
             lib_id,
             &SyncBatch {
                 upserts: vec![
-                    item("AAAA1111", "燃气轮机转子动力学研究", "张三; 李四", "2024", "仿真"),
-                    item("BBBB2222", "Turbine blade cooling", "Smith, John", "2023", "turbine"),
-                    item("CCCC3333", "数字孪生驱动的燃气轮机仿真", "王五", "2024", "数字孪生"),
+                    item(
+                        "AAAA1111",
+                        "燃气轮机转子动力学研究",
+                        "张三; 李四",
+                        "2024",
+                        "仿真",
+                    ),
+                    item(
+                        "BBBB2222",
+                        "Turbine blade cooling",
+                        "Smith, John",
+                        "2023",
+                        "turbine",
+                    ),
+                    item(
+                        "CCCC3333",
+                        "数字孪生驱动的燃气轮机仿真",
+                        "王五",
+                        "2024",
+                        "数字孪生",
+                    ),
                 ],
                 deleted_keys: vec![],
                 mirror_jobs: vec![],

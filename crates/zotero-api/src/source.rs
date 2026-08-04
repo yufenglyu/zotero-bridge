@@ -5,8 +5,8 @@
 //! implement the same interface.
 
 use crate::dto::{DeletedResponse, ZoteroItem};
-use zsb_core::{RemoteLibrary, Result, ServerInfo, VersionMap};
 use std::future::Future;
+use zsb_core::{RemoteLibrary, Result, ServerInfo, VersionMap};
 
 /// Versions of changed items plus the library version that produced them.
 #[derive(Debug, Clone, Default)]
@@ -33,9 +33,7 @@ pub struct DeletedObjects {
 pub trait ZoteroSource: Send + Sync {
     fn probe(&self) -> impl Future<Output = Result<ServerInfo>> + Send;
 
-    fn list_libraries(
-        &self,
-    ) -> impl Future<Output = Result<Vec<RemoteLibrary>>> + Send;
+    fn list_libraries(&self) -> impl Future<Output = Result<Vec<RemoteLibrary>>> + Send;
 
     fn changed_item_versions(
         &self,

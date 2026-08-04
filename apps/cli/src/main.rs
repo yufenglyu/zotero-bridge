@@ -116,15 +116,13 @@ fn init_tracing() {
 }
 
 async fn run(cli: Cli) -> Result<()> {
-    let config_path = cli
-        .config
-        .clone()
-        .unwrap_or(zsb_core::paths::config_file()?);
+    let config_path = zsb_core::paths::resolve_config_file(cli.config.as_deref())?;
     let config = zsb_core::config::load_or_create(&config_path)?;
-    let db_path = cli
-        .database
-        .clone()
-        .unwrap_or(zsb_core::paths::database_file()?);
+    let db_path = zsb_core::paths::resolve_database_file(
+        cli.database.as_deref(),
+        Some(&config.storage.database),
+        zsb_core::paths::is_portable_config(&config_path),
+    )?;
 
     match cli.command {
         Commands::Search {
@@ -318,17 +316,18 @@ async fn sync_once(
     full: bool,
     only_library: Option<&str>,
 ) -> Result<zsb_sync::SyncReport> {
-    let client = LocalApiClient::new(&config.zotero.api_base, config.zotero.request_timeout_seconds)?;
+    let client = LocalApiClient::new(
+        &config.zotero.api_base,
+        config.zotero.request_timeout_seconds,
+    )?;
     let mut db = Database::open(db_path)?;
     let report = if let Some(sel) = only_library {
         let (kind, id) = parse_library(sel)?;
         let kind_enum = zsb_core::LibraryKind::parse(kind)
             .ok_or_else(|| Error::Config(format!("未知库类型：{kind}")))?;
         let remote = lookup_remote(&client, kind_enum, &id).await?;
-        let info = zsb_zotero_api::discovery::probe_instance(&client, || {
-            "unpersisted".to_string()
-        })
-        .await?;
+        let info = zsb_zotero_api::discovery::probe_instance(&client, || "unpersisted".to_string())
+            .await?;
         // The libraries row has a FK to zotero_instances; register the
         // instance before syncing a single library.
         db.upsert_instance(&info)?;
@@ -337,10 +336,7 @@ async fn sync_once(
             server_id: info.server_id.clone(),
             ..Default::default()
         };
-        if let Some(lib_report) = engine
-            .sync_library(&info.server_id, &remote, full)
-            .await?
-        {
+        if let Some(lib_report) = engine.sync_library(&info.server_id, &remote, full).await? {
             report.libraries.push(lib_report);
         }
         report
@@ -398,7 +394,12 @@ fn enabled_platforms(config: &Config) -> Vec<Platform> {
 fn print_status(db: &Database) -> Result<()> {
     let stats = db.stats()?;
     println!("Zotero Search Bridge 状态");
-    println!("  数据库：{}", db.path().map(|p| p.display().to_string()).unwrap_or_default());
+    println!(
+        "  数据库：{}",
+        db.path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    );
     println!(
         "  当前实例：{}",
         db.active_instance_id()?.unwrap_or_else(|| "(未知)".into())
@@ -420,7 +421,11 @@ fn print_status(db: &Database) -> Result<()> {
             lib.remote.display_name,
             lib.remote.zotero_library_id,
             lib.state.last_version,
-            if lib.state.enabled { "启用" } else { "停用" }
+            if lib.state.enabled {
+                "启用"
+            } else {
+                "停用"
+            }
         );
         if let Some(err) = &lib.state.last_error {
             println!("      上次错误：{err}");
@@ -435,7 +440,10 @@ async fn doctor(config: &Config, db_path: &std::path::Path) {
     };
 
     // 1-4: Zotero probe.
-    match LocalApiClient::new(&config.zotero.api_base, config.zotero.request_timeout_seconds) {
+    match LocalApiClient::new(
+        &config.zotero.api_base,
+        config.zotero.request_timeout_seconds,
+    ) {
         Ok(client) => {
             use zsb_zotero_api::ZoteroSource;
             match client.probe().await {
@@ -486,15 +494,18 @@ async fn doctor(config: &Config, db_path: &std::path::Path) {
                 std::fs::remove_file(&probe)
             })
             .is_ok();
-        check(
-            ok,
-            format!("Mirror directory writable: {}", dir.display()),
-        );
+        check(ok, format!("Mirror directory writable: {}", dir.display()));
     }
 
     // 7: database file usable.
     match Database::open(db_path) {
-        Ok(db) => check(true, format!("Index database ok ({} items)", db.stats().map(|s| s.item_count).unwrap_or(0))),
+        Ok(db) => check(
+            true,
+            format!(
+                "Index database ok ({} items)",
+                db.stats().map(|s| s.item_count).unwrap_or(0)
+            ),
+        ),
         Err(e) => check(false, format!("Index database ({e})")),
     }
 
@@ -542,8 +553,12 @@ fn clean_mirrors(db: &Database, config: &Config) -> Result<()> {
                 continue;
             }
             // Mirror filenames always end with " -- <item_key>.<ext>".
-            let Some(stem) = name.strip_suffix(&ext) else { continue };
-            let Some(pos) = stem.rfind(" -- ") else { continue };
+            let Some(stem) = name.strip_suffix(&ext) else {
+                continue;
+            };
+            let Some(pos) = stem.rfind(" -- ") else {
+                continue;
+            };
             let key = &stem[pos + 4..];
             if key.is_empty() {
                 continue;

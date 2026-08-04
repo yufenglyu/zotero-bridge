@@ -3,9 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
-use zsb_core::{
-    Config, LibraryKind, Platform, RemoteLibrary, Result, ServerInfo, VersionMap,
-};
+use zsb_core::{Config, LibraryKind, Platform, RemoteLibrary, Result, ServerInfo, VersionMap};
 use zsb_index::Database;
 use zsb_sync::SyncEngine;
 use zsb_zotero_api::source::{DeletedObjects, ItemResponse, VersionResponse};
@@ -116,11 +114,7 @@ impl ZoteroSource for MockSource {
         })
     }
 
-    async fn fetch_items(
-        &self,
-        library: &RemoteLibrary,
-        keys: &[String],
-    ) -> Result<ItemResponse> {
+    async fn fetch_items(&self, library: &RemoteLibrary, keys: &[String]) -> Result<ItemResponse> {
         let items: Vec<ZoteroItem> = keys
             .iter()
             .filter_map(|k| self.items_for(library).get(k).cloned())
@@ -339,7 +333,10 @@ async fn new_instance_gets_isolated_partition() {
     )]);
     let cfg = test_config();
     let (mut db, _) = synced_db(&source, &cfg).await;
-    assert_eq!(db.active_instance_id().unwrap().as_deref(), Some("mock-server-1"));
+    assert_eq!(
+        db.active_instance_id().unwrap().as_deref(),
+        Some("mock-server-1")
+    );
 
     // Zotero database replaced: new server id, fresh library.
     let mut source2 = MockSource::new(vec![item_json(
@@ -353,7 +350,10 @@ async fn new_instance_gets_isolated_partition() {
         let mut engine = SyncEngine::new(&source2, &mut db, &cfg);
         engine.sync_all(false).await.unwrap();
     }
-    assert_eq!(db.active_instance_id().unwrap().as_deref(), Some("mock-server-2"));
+    assert_eq!(
+        db.active_instance_id().unwrap().as_deref(),
+        Some("mock-server-2")
+    );
     // Old instance data is preserved, new instance has its own rows.
     assert_eq!(db.count_items().unwrap(), 2);
     // Mirror cleanup jobs for the old instance were enqueued.
@@ -376,7 +376,14 @@ async fn empty_library_syncs_cleanly() {
 async fn batch_boundary_50_keys() {
     // 55 items forces two fetch_items batches (spec: max 50 keys each).
     let items: Vec<ZoteroItem> = (0..55)
-        .map(|i| item_json(&format!("KEY{i:05}"), 1, "journalArticle", &format!("批量测试文献 {i}")))
+        .map(|i| {
+            item_json(
+                &format!("KEY{i:05}"),
+                1,
+                "journalArticle",
+                &format!("批量测试文献 {i}"),
+            )
+        })
         .collect();
     let source = MockSource::new(items);
     let cfg = test_config();

@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use zsb_core::timeutil::now_rfc3339;
 use zsb_core::{
-    Error, IndexedItem, LibraryState, MirrorJob, MirrorOperation, Platform, RemoteLibrary,
-    Result, ServerInfo, SyncBatch,
+    Error, IndexedItem, LibraryState, MirrorJob, MirrorOperation, Platform, RemoteLibrary, Result,
+    ServerInfo, SyncBatch,
 };
 
 /// A library row joined with its remote identity and sync state.
@@ -455,9 +455,10 @@ impl Database {
 
     /// Returns true when the FTS index matches the items table.
     pub fn fts_integrity_check(&self) -> Result<bool> {
-        match self.conn.execute_batch(
-            "INSERT INTO items_fts(items_fts, rank) VALUES('integrity-check', 1);",
-        ) {
+        match self
+            .conn
+            .execute_batch("INSERT INTO items_fts(items_fts, rank) VALUES('integrity-check', 1);")
+        {
             Ok(()) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -484,8 +485,7 @@ impl Database {
                 let platform: String = row.get(2)?;
                 Ok(MirrorJob {
                     id: row.get(0)?,
-                    operation: MirrorOperation::parse(&op)
-                        .unwrap_or(MirrorOperation::Create),
+                    operation: MirrorOperation::parse(&op).unwrap_or(MirrorOperation::Create),
                     platform: match platform.as_str() {
                         "macos" => Platform::Macos,
                         _ => Platform::Windows,
@@ -562,11 +562,7 @@ impl Database {
             .map_err(migrations::db_err)? as u64;
         let last_sync_at: Option<String> = self
             .conn
-            .query_row(
-                "SELECT MAX(last_sync_at) FROM libraries",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT MAX(last_sync_at) FROM libraries", [], |r| r.get(0))
             .map_err(migrations::db_err)?;
         Ok(IndexStats {
             item_count,

@@ -25,8 +25,7 @@ mod tests {
 
     #[test]
     fn url_file_content() {
-        let content =
-            WindowsUrlBackend.build_content("zotero://select/library/items/N49R8KAQ");
+        let content = WindowsUrlBackend.build_content("zotero://select/library/items/N49R8KAQ");
         assert_eq!(
             content,
             "[InternetShortcut]\r\nURL=zotero://select/library/items/N49R8KAQ\r\n"

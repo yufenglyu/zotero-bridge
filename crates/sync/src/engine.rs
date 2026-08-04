@@ -25,11 +25,7 @@ pub struct SyncEngine<'a, S: ZoteroSource> {
 
 impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
     pub fn new(source: &'a S, db: &'a mut Database, config: &'a Config) -> Self {
-        SyncEngine {
-            source,
-            db,
-            config,
-        }
+        SyncEngine { source, db, config }
     }
 
     /// Sync every discovered library of the active instance.
@@ -124,7 +120,13 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
                 } => {
                     let report = self
                         .commit_library_changes(
-                            lib_id, remote, items, deleted_keys, since, new_version, full,
+                            lib_id,
+                            remote,
+                            items,
+                            deleted_keys,
+                            since,
+                            new_version,
+                            full,
                         )
                         .await?;
                     return Ok(Some(report));
@@ -133,11 +135,8 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
                     // No object versions on this server: items missing from
                     // the remote listing are treated as deleted, and the
                     // stored version is not advanced.
-                    let local_keys: std::collections::HashSet<String> = self
-                        .db
-                        .item_keys_for_library(lib_id)?
-                        .into_iter()
-                        .collect();
+                    let local_keys: std::collections::HashSet<String> =
+                        self.db.item_keys_for_library(lib_id)?.into_iter().collect();
                     let remote_set: std::collections::HashSet<&String> =
                         remote_keys.iter().collect();
                     let deleted_keys: Vec<String> = local_keys
@@ -146,7 +145,13 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
                         .collect();
                     let report = self
                         .commit_library_changes(
-                            lib_id, remote, items, deleted_keys, since, since, full,
+                            lib_id,
+                            remote,
+                            items,
+                            deleted_keys,
+                            since,
+                            since,
+                            full,
                         )
                         .await?;
                     return Ok(Some(report));
@@ -169,8 +174,8 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
         since: u64,
     ) -> Result<FetchOutcome> {
         let mut versions = self.source.changed_item_versions(remote, since).await?;
-        let versions_unavailable = versions.last_modified_version == 0
-            && versions.versions.values().all(|v| *v == 0);
+        let versions_unavailable =
+            versions.last_modified_version == 0 && versions.versions.values().all(|v| *v == 0);
         if versions_unavailable && since > 0 {
             // Re-request the full key listing; `since` filtering is not
             // meaningful without versions.
@@ -194,10 +199,7 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
         observed_versions.push(deleted.last_modified_version);
 
         // Ignore zero (missing header, e.g. mocks) when comparing.
-        let mut distinct: Vec<u64> = observed_versions
-            .into_iter()
-            .filter(|v| *v > 0)
-            .collect();
+        let mut distinct: Vec<u64> = observed_versions.into_iter().filter(|v| *v > 0).collect();
         distinct.sort_unstable();
         distinct.dedup();
         if distinct.len() > 1 {
@@ -288,12 +290,8 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
             }
         }
 
-        let mirror_jobs = plan_mirror_jobs(
-            self.config,
-            &mut upserts,
-            &deleted_keys,
-            &existing_names,
-        );
+        let mirror_jobs =
+            plan_mirror_jobs(self.config, &mut upserts, &deleted_keys, &existing_names);
 
         let batch = SyncBatch {
             new_version,
@@ -506,19 +504,13 @@ mod tests {
         );
         let jobs = plan_mirror_jobs(&cfg, &mut upserts, &["DEL00003".into()], &existing);
         assert_eq!(jobs.len(), 3);
-        assert!(jobs
-            .iter()
-            .any(|j| j.operation == MirrorOperation::Create
-                && j.new_path.as_ref().unwrap().contains("NEW00001.url")));
-        assert!(jobs
-            .iter()
-            .any(|j| j.operation == MirrorOperation::Rename
-                && j.old_path.as_ref().unwrap().contains("王五")
-                && j.new_path.as_ref().unwrap().contains("李四")));
-        assert!(jobs
-            .iter()
-            .any(|j| j.operation == MirrorOperation::Delete
-                && j.old_path.as_ref().unwrap().contains("DEL00003")));
+        assert!(jobs.iter().any(|j| j.operation == MirrorOperation::Create
+            && j.new_path.as_ref().unwrap().contains("NEW00001.url")));
+        assert!(jobs.iter().any(|j| j.operation == MirrorOperation::Rename
+            && j.old_path.as_ref().unwrap().contains("王五")
+            && j.new_path.as_ref().unwrap().contains("李四")));
+        assert!(jobs.iter().any(|j| j.operation == MirrorOperation::Delete
+            && j.old_path.as_ref().unwrap().contains("DEL00003")));
     }
 
     #[test]

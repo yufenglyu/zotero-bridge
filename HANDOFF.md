@@ -54,6 +54,23 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
 - 注意：zip 被提交进了 git（9.4 MB），如介意仓库体积可改为 gitignore
   并只通过 Release 分发。
 
+### 自定义路径（配置与索引，2026-08-04 晚）
+
+- `zsb_core::paths` 新增解析 API：`resolve_config_file` /
+  `resolve_database_file` / `is_portable_config` / `portable_config_file`，
+  优先级：CLI flag > 环境变量（`ZSB_CONFIG` / `ZSB_DATABASE`）>
+  配置 `[storage].database`（经 `expand_path`，支持 `%VAR%`/`~`）>
+  便携默认（exe 旁 `data\index.sqlite`）> 平台默认。
+- **便携模式**：exe 旁存在 `zsb-config.toml` 即触发；配置即用该文件，
+  索引默认落 exe 旁 `data\`。免安装 zip 自带一个注释版 `zsb-config.toml`，
+  实现真便携（已实测：解压后 `status` 显示数据库在解压目录 `data\`，
+  `ZSB_DATABASE` 与 `--database` 覆盖均生效）。
+- 配置文件新增 `[storage] database` 字段（空 = 默认）；
+  桌面端设置页新增“存储”面板可编辑，提示改后需重启。
+- 接入点：CLI `apps/cli/src/main.rs` 与桌面端 `apps/desktop/src-tauri/src/main.rs`
+  的 `main()` 开头；日志目录不受便携模式影响（仍写 `%LOCALAPPDATA%`）。
+- 测试：paths.rs 新增 5 项解析优先级测试，workspace 共 62 项全绿。
+
 ## 卡住的问题 / 未解决事项
 
 1. **Zotero 10.0-beta 无对象版本**：`format=versions` 返回空串、

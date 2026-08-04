@@ -82,6 +82,18 @@ author:Smith turbine   # 字段限定：author / year / tag / type / library
 数据与索引：`%LOCALAPPDATA%\ZoteroSearchBridge\data\index.sqlite`，
 与 Zotero 的 `zotero.sqlite` 完全独立，本项目只读 Local API，绝不写 Zotero。
 
+### 自定义路径
+
+配置与索引位置支持自定义，优先级从高到低：
+
+1. CLI 参数：`zsb --config <路径> --database <路径>`
+2. 环境变量：`ZSB_CONFIG` / `ZSB_DATABASE`
+3. 配置文件 `[storage]` 段的 `database`（支持 `%VAR%` 和 `~` 展开，
+   也可在桌面端“设置 → 存储”页修改，改后需重启）
+4. 便携模式：exe 旁存在 `zsb-config.toml` 时，配置即该文件，
+   索引默认放 exe 旁 `data\index.sqlite`（免安装版 zip 默认启用）
+5. 上述平台默认路径
+
 ## 里程碑状态
 
 - [x] **M0** 技术验证：Local API 探测、FTS5 trigram 中文子串搜索、`.url`/`.webloc`

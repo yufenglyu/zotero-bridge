@@ -71,10 +71,7 @@ pub fn database_file() -> Result<PathBuf> {
 pub fn log_dir() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(home_dir()?
-            .join("Library")
-            .join("Logs")
-            .join(APP_DIR));
+        return Ok(home_dir()?.join("Library").join("Logs").join(APP_DIR));
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -96,7 +93,9 @@ pub fn expand_path(input: &str) -> PathBuf {
 
     // Expand %VAR% segments.
     while let Some(start) = s.find('%') {
-        let Some(end_rel) = s[start + 1..].find('%') else { break };
+        let Some(end_rel) = s[start + 1..].find('%') else {
+            break;
+        };
         let end = start + 1 + end_rel;
         let var = &s[start + 1..end];
         let value = std::env::var(var).unwrap_or_default();
@@ -113,6 +112,89 @@ pub fn expand_path(input: &str) -> PathBuf {
     }
 
     PathBuf::from(s)
+}
+
+// ---------------------------------------------------------------------
+// Custom-path resolution (env vars / portable mode / config setting)
+// ---------------------------------------------------------------------
+
+/// Environment variable overriding the config file location.
+pub const ENV_CONFIG: &str = "ZSB_CONFIG";
+/// Environment variable overriding the index database location.
+pub const ENV_DATABASE: &str = "ZSB_DATABASE";
+/// Marker filename enabling portable mode when placed next to the exe.
+pub const PORTABLE_CONFIG_NAME: &str = "zsb-config.toml";
+
+/// Directory containing the running executable.
+pub fn exe_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+}
+
+/// Portable-mode marker config next to the executable, if present.
+pub fn portable_config_file() -> Option<PathBuf> {
+    let candidate = exe_dir()?.join(PORTABLE_CONFIG_NAME);
+    if candidate.exists() {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+/// Whether the given config path is the portable marker next to the exe.
+pub fn is_portable_config(path: &std::path::Path) -> bool {
+    portable_config_file().map(|p| p == path).unwrap_or(false)
+}
+
+/// Resolve the config file location.
+///
+/// Priority: explicit override (CLI flag) > `$ZSB_CONFIG` > portable
+/// marker `<exe>/zsb-config.toml` > platform default.
+pub fn resolve_config_file(cli_override: Option<&std::path::Path>) -> Result<PathBuf> {
+    if let Some(p) = cli_override {
+        return Ok(p.to_path_buf());
+    }
+    if let Some(v) = std::env::var_os(ENV_CONFIG) {
+        if !v.is_empty() {
+            return Ok(PathBuf::from(v));
+        }
+    }
+    if let Some(p) = portable_config_file() {
+        return Ok(p);
+    }
+    config_file()
+}
+
+/// Resolve the index database location.
+///
+/// Priority: explicit override (CLI flag) > `$ZSB_DATABASE` >
+/// `[storage].database` in config > portable default `<exe>/data/index.sqlite`
+/// (only in portable mode) > platform default.
+pub fn resolve_database_file(
+    cli_override: Option<&std::path::Path>,
+    config_db: Option<&str>,
+    portable: bool,
+) -> Result<PathBuf> {
+    if let Some(p) = cli_override {
+        return Ok(p.to_path_buf());
+    }
+    if let Some(v) = std::env::var_os(ENV_DATABASE) {
+        if !v.is_empty() {
+            return Ok(PathBuf::from(v));
+        }
+    }
+    if let Some(db) = config_db {
+        if !db.trim().is_empty() {
+            return Ok(expand_path(db));
+        }
+    }
+    if portable {
+        if let Some(dir) = exe_dir() {
+            return Ok(dir.join("data").join("index.sqlite"));
+        }
+    }
+    database_file()
 }
 
 #[cfg(test)]
@@ -142,5 +224,41 @@ mod tests {
         let db = database_file().unwrap().to_string_lossy().into_owned();
         assert!(db.ends_with("ZoteroSearchBridge\\data\\index.sqlite"));
         assert!(db.contains("Local"));
+    }
+
+    #[test]
+    fn database_resolution_cli_wins() {
+        let cli = std::path::Path::new("D:\\cli\\a.sqlite");
+        let got = resolve_database_file(Some(cli), Some("D:\\cfg\\b.sqlite"), true).unwrap();
+        assert_eq!(got, cli.to_path_buf());
+    }
+
+    #[test]
+    fn database_resolution_config_wins_over_portable() {
+        std::env::set_var("ZSB_TEST_DB", "D:\\custom");
+        let got = resolve_database_file(None, Some("%ZSB_TEST_DB%\\index.sqlite"), true).unwrap();
+        assert_eq!(got, PathBuf::from("D:\\custom\\index.sqlite"));
+    }
+
+    #[test]
+    fn database_resolution_portable_default() {
+        let got = resolve_database_file(None, None, true).unwrap();
+        let expect = exe_dir().unwrap().join("data").join("index.sqlite");
+        assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn database_resolution_platform_default() {
+        let got = resolve_database_file(None, Some(""), false).unwrap();
+        assert_eq!(got, database_file().unwrap());
+        let got = resolve_database_file(None, None, false).unwrap();
+        assert_eq!(got, database_file().unwrap());
+    }
+
+    #[test]
+    fn config_resolution_cli_wins() {
+        let cli = std::path::Path::new("D:\\cli\\config.toml");
+        let got = resolve_config_file(Some(cli)).unwrap();
+        assert_eq!(got, cli.to_path_buf());
     }
 }

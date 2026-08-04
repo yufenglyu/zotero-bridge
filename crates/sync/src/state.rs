@@ -25,9 +25,6 @@ pub struct SyncReport {
 
 impl SyncReport {
     pub fn total_changes(&self) -> usize {
-        self.libraries
-            .iter()
-            .map(|l| l.upserted + l.deleted)
-            .sum()
+        self.libraries.iter().map(|l| l.upserted + l.deleted).sum()
     }
 }

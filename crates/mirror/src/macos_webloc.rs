@@ -40,8 +40,7 @@ mod tests {
 
     #[test]
     fn webloc_content_contains_uri() {
-        let content =
-            MacosWeblocBackend.build_content("zotero://select/groups/123/items/ABC");
+        let content = MacosWeblocBackend.build_content("zotero://select/groups/123/items/ABC");
         assert!(content.contains("<string>zotero://select/groups/123/items/ABC</string>"));
         assert!(content.starts_with("<?xml"));
     }

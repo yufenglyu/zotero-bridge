@@ -76,7 +76,12 @@ pub fn pick_primary_creator(creators: &[Creator]) -> String {
     };
     by_type("author")
         .or_else(|| by_type("editor"))
-        .or_else(|| creators.first().map(format_creator).filter(|s| !s.is_empty()))
+        .or_else(|| {
+            creators
+                .first()
+                .map(format_creator)
+                .filter(|s| !s.is_empty())
+        })
         .unwrap_or_else(|| "无作者".to_string())
 }
 
@@ -253,7 +258,10 @@ mod tests {
             last_name: "Thor".into(),
             ..Default::default()
         };
-        assert_eq!(pick_primary_creator(&[editor.clone(), author.clone()]), "Thor, Au");
+        assert_eq!(
+            pick_primary_creator(&[editor.clone(), author.clone()]),
+            "Thor, Au"
+        );
         assert_eq!(pick_primary_creator(&[editor]), "Itor, Ed");
         assert_eq!(pick_primary_creator(&[]), "无作者");
     }
@@ -267,10 +275,9 @@ mod tests {
 
     #[test]
     fn filters_excluded_types() {
-        let raw: ZoteroItem = serde_json::from_str(
-            r#"{"key":"K1","version":1,"data":{"itemType":"attachment"}}"#,
-        )
-        .unwrap();
+        let raw: ZoteroItem =
+            serde_json::from_str(r#"{"key":"K1","version":1,"data":{"itemType":"attachment"}}"#)
+                .unwrap();
         assert!(normalize_item(&raw, &RemoteLibrary::user(), 1, true, true, true).is_none());
     }
 
@@ -285,10 +292,9 @@ mod tests {
 
     #[test]
     fn empty_title_gets_placeholder() {
-        let raw: ZoteroItem = serde_json::from_str(
-            r#"{"key":"K1ABCD","version":1,"data":{"itemType":"book"}}"#,
-        )
-        .unwrap();
+        let raw: ZoteroItem =
+            serde_json::from_str(r#"{"key":"K1ABCD","version":1,"data":{"itemType":"book"}}"#)
+                .unwrap();
         let item = normalize_item(&raw, &RemoteLibrary::user(), 1, true, true, true).unwrap();
         assert_eq!(item.title, "[无标题] -- K1ABCD");
     }

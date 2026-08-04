@@ -76,11 +76,7 @@ impl LocalApiClient {
             .map(|s| s.to_string())
     }
 
-    async fn get_text(
-        &self,
-        url: &str,
-        query: &[(&str, String)],
-    ) -> Result<(String, u64)> {
+    async fn get_text(&self, url: &str, query: &[(&str, String)]) -> Result<(String, u64)> {
         let resp = self
             .http
             .get(url)
@@ -101,7 +97,10 @@ impl LocalApiClient {
     ) -> Result<(T, u64)> {
         let (body, last_modified) = self.get_text(url, query).await?;
         let parsed: T = serde_json::from_str(&body).map_err(|e| {
-            Error::Json(format!("{e}; body starts: {}", &body[..body.len().min(120)]))
+            Error::Json(format!(
+                "{e}; body starts: {}",
+                &body[..body.len().min(120)]
+            ))
         })?;
         Ok((parsed, last_modified))
     }
@@ -115,10 +114,8 @@ impl ZoteroSource for LocalApiClient {
             .send()
             .await
             .map_err(Self::map_reqwest_err)?;
-        let api_version =
-            Self::header_u64(&resp, "zotero-api-version").map(|v| v as u32);
-        let schema_version =
-            Self::header_u64(&resp, "zotero-schema-version").map(|v| v as u32);
+        let api_version = Self::header_u64(&resp, "zotero-api-version").map(|v| v as u32);
+        let schema_version = Self::header_u64(&resp, "zotero-schema-version").map(|v| v as u32);
         let server_id = Self::header_string(&resp, "zotero-server-id").unwrap_or_default();
         let resp = Self::checked(resp).await?;
         drop(resp);
@@ -132,9 +129,8 @@ impl ZoteroSource for LocalApiClient {
 
     async fn list_libraries(&self) -> Result<Vec<RemoteLibrary>> {
         let mut libs = vec![RemoteLibrary::user()];
-        let (groups, _): (Vec<ZoteroGroup>, u64) = self
-            .get_json(&self.url("/users/0/groups"), &[])
-            .await?;
+        let (groups, _): (Vec<ZoteroGroup>, u64) =
+            self.get_json(&self.url("/users/0/groups"), &[]).await?;
         for g in groups {
             libs.push(RemoteLibrary::group(g.id.to_string(), g.data.name));
         }
@@ -179,11 +175,7 @@ impl ZoteroSource for LocalApiClient {
         })
     }
 
-    async fn fetch_items(
-        &self,
-        library: &RemoteLibrary,
-        keys: &[String],
-    ) -> Result<ItemResponse> {
+    async fn fetch_items(&self, library: &RemoteLibrary, keys: &[String]) -> Result<ItemResponse> {
         if keys.is_empty() {
             return Ok(ItemResponse::default());
         }
@@ -191,10 +183,7 @@ impl ZoteroSource for LocalApiClient {
         let (items, lm): (Vec<ZoteroItem>, u64) = self
             .get_json(
                 &url,
-                &[
-                    ("itemKey", keys.join(",")),
-                    ("includeTrashed", "1".into()),
-                ],
+                &[("itemKey", keys.join(",")), ("includeTrashed", "1".into())],
             )
             .await?;
         Ok(ItemResponse {
@@ -203,15 +192,10 @@ impl ZoteroSource for LocalApiClient {
         })
     }
 
-    async fn deleted_objects(
-        &self,
-        library: &RemoteLibrary,
-        since: u64,
-    ) -> Result<DeletedObjects> {
+    async fn deleted_objects(&self, library: &RemoteLibrary, since: u64) -> Result<DeletedObjects> {
         let url = self.url(&format!("{}/deleted", library.api_prefix));
-        let (deleted, lm): (DeletedResponse, u64) = self
-            .get_json(&url, &[("since", since.to_string())])
-            .await?;
+        let (deleted, lm): (DeletedResponse, u64) =
+            self.get_json(&url, &[("since", since.to_string())]).await?;
         Ok(DeletedObjects {
             deleted,
             last_modified_version: lm,

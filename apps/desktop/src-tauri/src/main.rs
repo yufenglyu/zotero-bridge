@@ -69,9 +69,11 @@ async fn sync_once_send(config: Config, db_path: PathBuf) -> zsb_core::Result<St
     .map_err(|e| zsb_core::Error::Config(format!("sync worker join: {e}")))?
 }
 
-async fn sync_once(config: &Config, db_path: &PathBuf) -> zsb_core::Result<String> {
-    let client =
-        LocalApiClient::new(&config.zotero.api_base, config.zotero.request_timeout_seconds)?;
+async fn sync_once(config: &Config, db_path: &std::path::Path) -> zsb_core::Result<String> {
+    let client = LocalApiClient::new(
+        &config.zotero.api_base,
+        config.zotero.request_timeout_seconds,
+    )?;
     let mut db = Database::open(db_path)?;
     let report = {
         let mut engine = SyncEngine::new(&client, &mut db, config);
@@ -133,11 +135,7 @@ async fn get_status(state: State<'_, AppState>) -> Result<StatusView, String> {
             last_error: l.state.last_error,
         })
         .collect();
-    let instance = db
-        .active_instance_id()
-        .ok()
-        .flatten()
-        .unwrap_or_default();
+    let instance = db.active_instance_id().ok().flatten().unwrap_or_default();
 
     let zotero_running = {
         let cfg = state.config.read().unwrap().clone();
@@ -240,7 +238,10 @@ fn open_folder(dir: &PathBuf) -> std::io::Result<()> {
 
 #[cfg(not(windows))]
 fn open_folder(dir: &PathBuf) -> std::io::Result<()> {
-    std::process::Command::new("open").arg(dir).spawn().map(|_| ())
+    std::process::Command::new("open")
+        .arg(dir)
+        .spawn()
+        .map(|_| ())
 }
 
 #[tauri::command]
@@ -371,7 +372,13 @@ fn spawn_sync_loop(app: AppHandle) {
             }
             let interval = {
                 let state = app.state::<AppState>();
-                let seconds = state.config.read().unwrap().app.poll_interval_seconds.max(5);
+                let seconds = state
+                    .config
+                    .read()
+                    .unwrap()
+                    .app
+                    .poll_interval_seconds
+                    .max(5);
                 seconds
             };
             tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
@@ -380,9 +387,14 @@ fn spawn_sync_loop(app: AppHandle) {
 }
 
 fn main() {
-    let config_path = zsb_core::paths::config_file().expect("config path");
+    let config_path = zsb_core::paths::resolve_config_file(None).expect("config path");
     let config = zsb_core::config::load_or_create(&config_path).expect("load config");
-    let db_path = zsb_core::paths::database_file().expect("database path");
+    let db_path = zsb_core::paths::resolve_database_file(
+        None,
+        Some(&config.storage.database),
+        zsb_core::paths::is_portable_config(&config_path),
+    )
+    .expect("database path");
 
     // File logging into the platform log directory.
     if let Ok(log_dir) = zsb_core::paths::log_dir() {
@@ -424,7 +436,7 @@ fn main() {
             // Apply autostart preference.
             let state = app.state::<AppState>();
             let start_at_login = state.config.read().unwrap().app.start_at_login;
-            apply_autostart(&app.handle(), start_at_login);
+            apply_autostart(app.handle(), start_at_login);
 
             // System tray.
             let show = MenuItemBuilder::with_id("show", "显示主窗口").build(app)?;
@@ -438,8 +450,7 @@ fn main() {
                 .build()?;
 
             let icon_bytes = include_bytes!("../icons/32x32.png");
-            let icon = tauri::image::Image::from_bytes(icon_bytes)
-                .expect("tray icon png");
+            let icon = tauri::image::Image::from_bytes(icon_bytes).expect("tray icon png");
 
             TrayIconBuilder::with_id("main")
                 .icon(icon)

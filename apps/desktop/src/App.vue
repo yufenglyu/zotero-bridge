@@ -44,6 +44,7 @@ interface Config {
     macos: { enabled: boolean; directory: string; template: string };
   };
   maintenance: { optimize_after_updates: number; retain_logs_days: number };
+  storage: { database: string };
 }
 
 const tab = ref<"status" | "settings" | "doctor">("status");
@@ -298,6 +299,15 @@ onUnmounted(() => {
           <span>镜像目录</span>
           <input type="text" v-model="config.mirror.macos.directory" />
         </label>
+      </div>
+
+      <div class="panel">
+        <h3>存储</h3>
+        <label class="field">
+          <span>索引数据库路径（留空 = 默认位置，支持 %VAR% 和 ~）</span>
+          <input type="text" v-model="config.storage.database" placeholder="留空使用默认位置" />
+        </label>
+        <p class="hint">修改数据库路径后需重启程序生效；已有索引不会自动迁移。</p>
       </div>
 
       <div class="actions">

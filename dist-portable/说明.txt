@@ -5,6 +5,7 @@ Zotero Search Bridge 便携版（免安装）
 ----
 - zsb-desktop.exe   桌面托盘程序（双击运行，状态页/设置页/自动同步）
 - zsb.exe           命令行工具（搜索、同步、诊断、维护）
+- zsb-config.toml   便携模式标记文件（见下文“数据位置”）
 - 说明.txt          本文件
 
 快速开始
@@ -23,22 +24,35 @@ Zotero Search Bridge 便携版（免安装）
 
 Listary 集成
 ------------
-把以下镜像目录加入 Listary 索引，即可按 作者/年份/标题 搜索并双击定位：
+托盘程序“设置”页可查看镜像目录；把它加入 Listary 索引，即可按
+作者/年份/标题 搜索并双击定位。默认镜像目录：
   %LOCALAPPDATA%\ZoteroSearchBridge\mirrors\windows\
-也可在托盘程序“设置”页把镜像目录改到你已有的 Listary 索引目录。
+也可在设置页改到你已有的 Listary 索引目录。
 
-数据位置
---------
-配置：%APPDATA%\ZoteroSearchBridge\config.toml
-索引：%LOCALAPPDATA%\ZoteroSearchBridge\data\index.sqlite
-日志：%LOCALAPPDATA%\ZoteroSearchBridge\logs\zsb.log
-
-说明：便携版不写入注册表、不创建开始菜单项；但配置与索引仍保存在
-上述用户目录中（删除这两个目录即可完全卸载所有数据）。
-
-自定义数据位置（可选）
+数据位置（便携模式）
 --------------------
-zsb.exe 支持 --config 和 --database 参数指定配置与索引路径，例如：
-  zsb.exe --config D:\zsb\config.toml --database D:\zsb\index.sqlite sync
+本压缩包自带一个 zsb-config.toml。只要它与 exe 放在同一目录，
+程序即进入“便携模式”，全部数据都保存在 exe 旁边的 data\ 目录：
+  配置：<本目录>\zsb-config.toml
+  索引：<本目录>\data\index.sqlite
+整个文件夹可以随意移动、放 U 盘；删除该文件夹即完全卸载。
+（注意：便携模式下日志仍写入用户目录 %LOCALAPPDATA%\ZoteroSearchBridge\logs\。）
+
+如果删掉 zsb-config.toml，则退回系统默认位置：
+  配置：%APPDATA%\ZoteroSearchBridge\config.toml
+  索引：%LOCALAPPDATA%\ZoteroSearchBridge\data\index.sqlite
+
+自定义路径（四种方式，优先级从高到低）
+--------------------------------------
+1. 命令行参数（仅 zsb.exe）：
+     zsb.exe --config D:\zsb\config.toml --database D:\zsb\index.sqlite sync
+2. 环境变量：
+     ZSB_CONFIG=D:\zsb\config.toml
+     ZSB_DATABASE=D:\zsb\index.sqlite
+3. 配置文件里的 [storage] 段（支持 %VAR% 和 ~ 展开，
+   也可在托盘程序“设置 → 存储”页修改，改后需重启程序）：
+     [storage]
+     database = "D:\\zsb\\index.sqlite"
+4. 默认位置（便携模式 = exe 旁 data\；否则 = 上述系统目录）。
 
 版本：v0.1.0（2026-08-04 构建）

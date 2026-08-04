@@ -5,3 +5,6 @@ node_modules/
 apps/desktop/dist/
 smoke_screen.png
 /dist-portable/*.exe
+
+# portable staging dir (zip 是唯一分发物)
+zsb-portable/

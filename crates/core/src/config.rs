@@ -13,6 +13,7 @@ pub struct Config {
     pub search: SearchConfig,
     pub mirror: MirrorConfig,
     pub maintenance: MaintenanceConfig,
+    pub storage: StorageConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +58,15 @@ pub struct MirrorPlatformConfig {
     pub enabled: bool,
     pub directory: String,
     pub template: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StorageConfig {
+    /// Custom index database location. Empty = default (portable data dir
+    /// next to the exe in portable mode, otherwise the platform data dir).
+    /// Supports %VAR% and ~ expansion.
+    pub database: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,9 +119,7 @@ impl Default for MirrorConfig {
                 enabled: true,
                 directory: crate::paths::default_mirror_dir_windows()
                     .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|_| {
-                        "%LOCALAPPDATA%/ZoteroSearchBridge/mirrors/windows".into()
-                    }),
+                    .unwrap_or_else(|_| "%LOCALAPPDATA%/ZoteroSearchBridge/mirrors/windows".into()),
                 template: DEFAULT_TEMPLATE.into(),
             },
             macos: MirrorPlatformConfig {
@@ -163,8 +171,8 @@ pub fn load_or_create(path: &Path) -> Result<Config> {
         return Ok(cfg);
     }
     let text = fs::read_to_string(path)?;
-    let cfg: Config = toml::from_str(&text)
-        .map_err(|e| Error::Config(format!("{}: {e}", path.display())))?;
+    let cfg: Config =
+        toml::from_str(&text).map_err(|e| Error::Config(format!("{}: {e}", path.display())))?;
     Ok(cfg)
 }
 
@@ -173,8 +181,8 @@ pub fn save(path: &Path, cfg: &Config) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let text = toml::to_string_pretty(cfg)
-        .map_err(|e| Error::Config(format!("serialize config: {e}")))?;
+    let text =
+        toml::to_string_pretty(cfg).map_err(|e| Error::Config(format!("serialize config: {e}")))?;
     let tmp = path.with_extension("toml.tmp");
     fs::write(&tmp, text)?;
     fs::rename(&tmp, path)?;
