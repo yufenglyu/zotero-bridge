@@ -93,7 +93,9 @@ author:Smith turbine   # 字段限定：author / year / tag / type / library
 - [x] **M3**（部分）Alfred/Raycast 输出格式与集成示例
 - [x] **M4** Tauri 桌面托盘程序：托盘菜单（显示/立即同步/暂停/退出）、
       状态页、设置页、诊断页、后台轮询同步、开机自启、关闭最小化到托盘
-- [ ] **M5** 安装程序与发布流程（含更新通知）
+- [x] **M5**（核心）Windows NSIS/MSI 安装包（已构建验证）、GitHub Actions
+      CI/发布流水线、签名与公证流程文档、版本迁移机制、故障诊断文档；
+      macOS DMG 需 macOS 环境构建
 
 ## 桌面程序（M4）
 

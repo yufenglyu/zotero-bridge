@@ -23,12 +23,33 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": "all",
+    "publisher": "Zotero Search Bridge",
+    "shortDescription": "External fast search and item locator for Zotero",
+    "longDescription": "Zotero Search Bridge syncs your Zotero library into a local full-text index and exposes it to Listary, Alfred and Raycast via zotero:// select links.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
+      "icons/256x256.png",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": [],
+    "copyright": "Copyright (c) 2026 Zotero Search Bridge contributors",
+    "category": "Utility",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "languages": ["SimpChinese", "English"]
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "entitlements": null
+    }
   }
 }
