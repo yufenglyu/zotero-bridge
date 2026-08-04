@@ -1,0 +1,12 @@
+[package]
+name = "zsb-mirror"
+description = "Filesystem mirror manager (.url / .webloc) for Zotero Search Bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zsb-core = { path = "../core" }
+zsb-index = { path = "../index" }
+thiserror.workspace = true
+tracing.workspace = true

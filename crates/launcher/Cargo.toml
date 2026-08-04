@@ -1,0 +1,11 @@
+[package]
+name = "zsb-launcher"
+description = "Cross-platform zotero:// URI launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zsb-core = { path = "../core" }
+open.workspace = true
+thiserror.workspace = true
