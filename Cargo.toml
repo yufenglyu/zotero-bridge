@@ -8,6 +8,7 @@ members = [
     "crates/mirror",
     "crates/launcher",
     "apps/cli",
+    "apps/desktop/src-tauri",
 ]
 
 [workspace.package]
@@ -25,6 +26,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 directories = "5"
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"

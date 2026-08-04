@@ -91,8 +91,23 @@ author:Smith turbine   # 字段限定：author / year / tag / type / library
 - [x] **M2** Windows Listary 集成：`.url` 模板/清理/原子写入、
       mirror_jobs 持久化任务队列（崩溃可恢复）、重试
 - [x] **M3**（部分）Alfred/Raycast 输出格式与集成示例
-- [ ] **M4** Tauri 桌面托盘程序（未实现，`zsb sync --watch` 可暂代）
-- [ ] **M5** 安装程序与发布流程
+- [x] **M4** Tauri 桌面托盘程序：托盘菜单（显示/立即同步/暂停/退出）、
+      状态页、设置页、诊断页、后台轮询同步、开机自启、关闭最小化到托盘
+- [ ] **M5** 安装程序与发布流程（含更新通知）
+
+## 桌面程序（M4）
+
+```sh
+cd apps/desktop
+npm install
+npm run build            # 产出 dist/（Tauri 加载它）
+cd ../..
+cargo build --release -p zsb-desktop
+# 运行：target/release/zsb-desktop(.exe)
+```
+
+前端联调：`npm run dev` 启动 Vite 开发服务器（浏览器预览会提示无
+Tauri 环境，属正常；完整功能需运行桌面程序）。
 
 ## 兼容性说明：Zotero 10.0-beta 的对象版本
 
