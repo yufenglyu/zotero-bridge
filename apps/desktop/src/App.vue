@@ -243,19 +243,31 @@ onUnmounted(() => {
       <div class="cards">
         <div class="card">
           <div class="card-value">{{ status.item_count.toLocaleString() }}</div>
-          <div class="card-label">已索引条目</div>
+          <div class="card-label">
+            已索引条目
+            <i class="help" title="本地全文索引中的文献条目数。索引在本地，Zotero 关闭时也能搜索。">?</i>
+          </div>
         </div>
         <div class="card">
           <div class="card-value">{{ status.library_count }}</div>
-          <div class="card-label">文献库</div>
+          <div class="card-label">
+            文献库
+            <i class="help" title="已接入的 Zotero 库数量（个人库 + 群组库）。">?</i>
+          </div>
         </div>
         <div class="card">
           <div class="card-value">{{ status.pending_jobs }}</div>
-          <div class="card-label">待执行镜像任务</div>
+          <div class="card-label">
+            待执行镜像任务
+            <i class="help" title="等待写入镜像目录的 .url 快捷方式数量。同步后自动生成，正常情况下会很快清零；程序崩溃未完成的任务会在下次启动时继续。">?</i>
+          </div>
         </div>
         <div class="card" :class="{ warn: status.failed_jobs > 0 }">
           <div class="card-value">{{ status.failed_jobs }}</div>
-          <div class="card-label">失败任务</div>
+          <div class="card-label">
+            失败任务
+            <i class="help" title="多次重试仍失败的镜像任务。可在诊断页排查镜像目录可写性，或使用“重建索引”。">?</i>
+          </div>
         </div>
       </div>
 
@@ -278,7 +290,14 @@ onUnmounted(() => {
           <button :disabled="busy" @click="togglePause">
             {{ status.paused ? "恢复同步" : "暂停同步" }}
           </button>
-          <button class="danger" :disabled="busy" @click="rebuildIndex">重建索引</button>
+          <button
+            class="danger"
+            :disabled="busy"
+            title="清空本地索引并全量重新同步。索引损坏或搜索结果异常时使用；耗时较长（数千条约一分钟）。"
+            @click="rebuildIndex"
+          >
+            重建索引
+          </button>
         </div>
       </div>
 
@@ -287,7 +306,10 @@ onUnmounted(() => {
         <div v-for="lib in status.libraries" :key="lib.kind + lib.zotero_library_id" class="lib">
           <span class="tag">{{ lib.kind }}</span>
           <span class="lib-name">{{ lib.display_name }}</span>
-          <span class="lib-meta">id={{ lib.zotero_library_id }} · 版本 {{ lib.last_version }}</span>
+          <span class="lib-meta">
+            id={{ lib.zotero_library_id }} · 版本 {{ lib.last_version }}
+            <i class="help" title="该库上次同步到的 Zotero 对象版本号，用于增量同步。为 0 表示此 Zotero 构建不暴露版本号，程序会自动改用全量比对模式。">?</i>
+          </span>
           <span class="lib-state" :class="{ off: !lib.enabled }">
             {{ lib.enabled ? "启用" : "停用" }}
           </span>
@@ -334,7 +356,10 @@ onUnmounted(() => {
           <span>开机自动启动</span>
         </label>
         <label class="field">
-          <span>轮询周期（秒）</span>
+          <span>
+            轮询周期（秒）
+            <i class="help" title="每隔多少秒检查一次 Zotero 的文献变更。过小会增加 Zotero 负载，建议 15–60 秒。">?</i>
+          </span>
           <input type="number" v-model.number="config.app.poll_interval_seconds" min="5" />
         </label>
         <label class="field">
@@ -363,7 +388,10 @@ onUnmounted(() => {
           <span>索引个人库</span>
         </label>
         <label class="field">
-          <span>群组库</span>
+          <span>
+            群组库
+            <i class="help" title="是否索引你加入的 Zotero 群组库。改为“不索引”后，已索引的群组条目会在下次同步时移除。">?</i>
+          </span>
           <select v-model="config.zotero.group_mode">
             <option value="all">全部索引</option>
             <option value="none">不索引</option>
@@ -387,11 +415,17 @@ onUnmounted(() => {
         </label>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.search.index_extra" />
-          <span>索引 Extra 字段</span>
+          <span>
+            索引 Extra 字段
+            <i class="help" title="把条目的 Extra 备注字段也纳入搜索。适合在 Extra 里记了 DOI、笔记等内容的用户。">?</i>
+          </span>
         </label>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.search.short_query_fallback" />
-          <span>短查询回退（单字也走 LIKE 兜底）</span>
+          <span>
+            短查询回退
+            <i class="help" title="1–2 个字符的查询无法走全文索引（trigram 至少需 3 字符），开启后自动改用 LIKE 模糊匹配兜底，单字也能搜到。">?</i>
+          </span>
         </label>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.search.store_raw_json" />
@@ -400,7 +434,10 @@ onUnmounted(() => {
       </div>
 
       <div class="panel">
-        <h3>镜像（外部工具定位）</h3>
+        <h3>
+          镜像（外部工具定位）
+          <i class="help" title="镜像 = 为每条文献在指定目录生成一个快捷方式文件（Windows 为 .url，macOS 为 .webloc），双击即用 zotero:// 协议定位到 Zotero 中的条目。把镜像目录加入 Listary / Alfred 等启动器索引，就能按作者、年份、标题搜索并跳转。">?</i>
+        </h3>
         <h4>Windows · .url（Listary）</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.windows.enabled" />
@@ -411,7 +448,10 @@ onUnmounted(() => {
           <input type="text" v-model="config.mirror.windows.directory" />
         </label>
         <label class="field">
-          <span>文件名模板</span>
+          <span>
+            文件名模板
+            <i class="help" title="镜像 .url 文件的命名规则。可用变量：{primary_creator}（第一作者）、{year}（年份）、{title}（标题）、{item_key}（条目键）。">?</i>
+          </span>
           <input type="text" v-model="config.mirror.windows.template" />
         </label>
         <h4>macOS · .webloc</h4>
