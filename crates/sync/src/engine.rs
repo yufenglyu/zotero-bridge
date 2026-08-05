@@ -17,6 +17,13 @@ use zsb_zotero_api::{ZoteroItem, ZoteroSource, BATCH_SIZE};
 const UNSTABLE_MAX_RETRIES: u32 = 3;
 const UNSTABLE_BACKOFF_MS: u64 = 500;
 
+/// Bumped whenever normalization or the preserved `raw_json` shape changes
+/// in a way that makes previously indexed rows incomplete (for example when
+/// new Zotero fields become available to the filename templater). A mismatch
+/// against the persisted value forces one full sync.
+/// 1 → initial; 2 → ItemData flatten map started preserving every field.
+const NORMALIZER_VERSION: &str = "2";
+
 pub struct SyncEngine<'a, S: ZoteroSource> {
     source: &'a S,
     db: &'a mut Database,
@@ -30,6 +37,21 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
 
     /// Sync every discovered library of the active instance.
     pub async fn sync_all(&mut self, full: bool) -> Result<SyncReport> {
+        // When the normalizer/raw_json semantics change (e.g. new preserved
+        // fields for the filename templater), rows written by older builds
+        // are stale and version-based incremental sync will never refetch
+        // them. Force one full sync so every row is rewritten.
+        let stored_nv = self.db.meta_get("normalizer_version")?;
+        let full = if stored_nv.as_deref() != Some(NORMALIZER_VERSION) {
+            info!(
+                old = ?stored_nv,
+                new = NORMALIZER_VERSION,
+                "normalizer version changed; forcing full sync"
+            );
+            true
+        } else {
+            full
+        };
         // Probe and resolve the server id, with a persisted legacy fallback.
         let legacy = self.db.meta_get("legacy_server_id")?;
         let info = probe_instance(self.source, || {
@@ -79,6 +101,7 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
                 }
             }
         }
+        self.db.meta_set("normalizer_version", NORMALIZER_VERSION)?;
         Ok(report)
     }
 
@@ -270,10 +293,15 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
                 self.config.search.index_extra,
             ) {
                 Some(item) => {
-                    // Skip no-op updates identified by content hash.
+                    // Skip no-op updates identified by content hash. The
+                    // preserved raw_json is compared as well: it is not part
+                    // of the content hash, and rows written before new fields
+                    // were preserved (see NORMALIZER_VERSION) must be
+                    // rewritten on the forced full sync.
                     if let Some(old) = self.db.get_item(lib_id, &item.item_key)? {
                         if old.content_hash == item.content_hash
                             && old.item_version == item.item_version
+                            && old.raw_json == item.raw_json
                         {
                             skipped += 1;
                             continue;

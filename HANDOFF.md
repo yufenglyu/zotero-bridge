@@ -217,6 +217,13 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
     （zotero.org/support/file_renaming）重写 `format_creators`，
     补全 `name`/`initialize`/`initialize-with`/`name-part-separator`/
     `join` 参数（2026-08-05）。
+12. **新增字段保留后旧索引行不会自动修复**：`ItemData` 的 flatten map
+    （保留 number 等全部字段）是后加的，旧行 raw_json 缺字段，而
+    content_hash 不含 raw_json、增量同步按版本号抓——旧行永远不会被
+    重写（standard 链接文件名曾因此缺标准号前缀）。解法：
+    `NORMALIZER_VERSION` 元数据机制（不一致则强制一次全量同步）+
+    跳过条件补 `raw_json` 比对（engine.rs，2026-08-05）。以后凡是
+    normalizer/DTO 保留字段变化，递增该版本号。
 
 ## 关键路径速查
 
