@@ -224,6 +224,14 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
     `NORMALIZER_VERSION` 元数据机制（不一致则强制一次全量同步）+
     跳过条件补 `raw_json` 比对（engine.rs，2026-08-05）。以后凡是
     normalizer/DTO 保留字段变化，递增该版本号。
+13. **Zotero 模板的字段名走「基字段映射」**：`{{publisher}}` 对 thesis
+    实际取 `university`、`{{date}}` 对 patent 实际取 `issueDate`（不是
+    filingDate）。resolve() 已加候选链：publisher→[publisher,
+    university, institution]、date→[date, issueDate, filingDate]
+    （ztemplate.rs，2026-08-05）。验证方法：以 Zotero 已重命名的附件
+    文件名为基准逐字比对（注意 children 列表无 filename，要取完整条目
+    的 path 字段），60 条抽查 52 条一致，8 条不一致均为 Zotero 侧
+    旧模板/旧元数据重命名的遗留文件。
 
 ## 关键路径速查
 

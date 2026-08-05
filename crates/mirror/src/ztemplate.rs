@@ -355,7 +355,8 @@ fn resolve(name: &str, ctx: &Ctx) -> String {
     match name {
         "title" => data_str(ctx, &["title"]).unwrap_or_else(|| ctx.item.title.clone()),
         "itemType" => data_str(ctx, &["itemType"]).unwrap_or_else(|| ctx.item.item_type.clone()),
-        "date" => data_str(ctx, &["date"]).unwrap_or_else(|| ctx.item.year.clone()),
+        "date" => data_str(ctx, &["date", "issueDate", "filingDate"])
+            .unwrap_or_else(|| ctx.item.year.clone()),
         "year" => {
             let date = resolve("date", ctx);
             if date.is_empty() {
@@ -380,6 +381,9 @@ fn resolve(name: &str, ctx: &Ctx) -> String {
             &["number", "reportNumber", "patentNumber", "caseNumber"],
         )
         .unwrap_or_default(),
+        "publisher" => {
+            data_str(ctx, &["publisher", "university", "institution"]).unwrap_or_default()
+        }
         other => data_str(ctx, &[other]).unwrap_or_default(),
     }
 }
@@ -625,6 +629,34 @@ mod tests {
         );
         let t = "{{if itemType == \"document\"}}D{{if versionNumber}}（v{{versionNumber}}）{{endif}}{{else}}E{{endif}}";
         assert_eq!(render(t, &i), "D（v3）");
+    }
+
+    #[test]
+    fn base_field_mappings() {
+        // thesis: 模板里的 publisher 取 type-specific 的 university 字段
+        let thesis = item_with_raw(
+            r#"{"key":"K8","version":1,"data":{"itemType":"thesis","title":"T","date":"2016","university":"南京航空航天大学","creators":[{"creatorType":"author","name":"王铁成"}]}}"#,
+            "K8",
+        );
+        assert_eq!(
+            render(
+                "【{{authors max=\"1\" initialize=\"given\"}}-{{date}}】{{title}}{{if publisher}}（{{publisher}}）{{endif}}",
+                &thesis
+            ),
+            "【王铁成-2016】T（南京航空航天大学）"
+        );
+        // patent: 模板里的 date 取 issueDate（而非 filingDate）
+        let patent = item_with_raw(
+            r#"{"key":"K9","version":1,"data":{"itemType":"patent","title":"T","number":"CN113568705B","filingDate":"2021-07-23","issueDate":"2024-03-22","creators":[]}}"#,
+            "K9",
+        );
+        assert_eq!(
+            render(
+                "{{number}} {{title}}{{if date}}（{{date replaceFrom=\"[^0-9].*\" replaceTo=\"\" regexOpts=\"g\"}}）{{endif}}",
+                &patent
+            ),
+            "CN113568705B T（2024）"
+        );
     }
 
     #[test]
