@@ -49,8 +49,9 @@ New-Item -ItemType Directory -Force -Path $Stage, $Dist | Out-Null
 Write-Host "==> Assembling portable package"
 Copy-Item "target\release\zsb.exe" $Stage
 Copy-Item "target\release\zsb-desktop.exe" $Stage
-# Static assets live in dist-portable\ (说明.txt, zsb-config.toml)
-Copy-Item "dist-portable\*" $Stage -Recurse
+# Static assets live in packaging\ (说明.txt, zsb-config.toml); tracked in git
+if (-not (Test-Path "packaging")) { throw "packaging\ missing: portable zip assets (说明.txt / zsb-config.toml) not found. Restore with: git checkout -- packaging" }
+Copy-Item "packaging\*" $Stage -Recurse
 
 $ZipName = "zsb-portable-v$Version-windows-x64.zip"
 $ZipPath = Join-Path $Dist $ZipName

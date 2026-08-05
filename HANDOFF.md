@@ -52,12 +52,13 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
 - 便携版 zip 改为输出到 `target\dist\zsb-portable-v0.1.0-windows-x64.zip`，
   不再提交进 git；新增 `scripts\release.ps1`（构建前端 + release 二进制 +
   组装 zip + 复制 NSIS/MSI 安装包，`-SkipBuild` 可跳过构建）。
-- 静态打包资源保留在 `dist-portable\`（说明.txt、zsb-config.toml）；
+- 静态打包资源在 `packaging\`（说明.txt、zsb-config.toml，git 跟踪的源文件）；
   脚本从 `target\release\` 取 exe 组装到 `target\portable\` 再压缩。
 - 坑：Windows PowerShell 5.1 把无 BOM 的 UTF-8 脚本按 GBK 解析，
   中文注释会导致莫名其妙的语法错误 → 脚本统一用纯 ASCII 编写。
-- 坑：`Copy-Item "dist-portable\*"` 在目录被误删后报 PathNotFound；
-  dist-portable 曾被一次误操作从工作区删除，用 `git checkout -- dist-portable` 恢复。
+- **2026-08-05 改名**：资源目录原叫 `dist-portable\`，名字像构建产物被
+  误删过两次 → `git mv` 改为 `packaging\`；release.ps1 在目录缺失时给出
+  明确报错（提示 `git checkout -- packaging` 恢复）。
 
 ### 桌面端修复与 UI 重构（2026-08-05）
 - **常驻命令行窗口**：main.rs 缺 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`，
