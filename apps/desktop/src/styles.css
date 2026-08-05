@@ -1,14 +1,37 @@
+/* VS Code Light+ 风格（默认浅色） */
 :root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --panel: #f3f3f3;
+  --panel-border: #e0e0e0;
+  --input-bg: #ffffff;
+  --text: #1f1f1f;
+  --text-dim: #616161;
+  --accent: #0078d4;
+  --accent-hover: #106ebe;
+  --accent-soft: rgba(0, 120, 212, 0.12);
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --err: #cf222e;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* VS Code Dark+ 风格 */
+:root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #14161a;
-  --panel: #1d2026;
-  --panel-border: #2a2e36;
-  --text: #e8eaee;
-  --text-dim: #9aa1ad;
-  --accent: #4f8cff;
-  --ok: #3ecf8e;
-  --warn: #f5a623;
-  --err: #ef5b5b;
+  --bg: #1e1e1e;
+  --panel: #252526;
+  --panel-border: #3c3c3c;
+  --input-bg: #1e1e1e;
+  --text: #cccccc;
+  --text-dim: #9d9d9d;
+  --accent: #0e639c;
+  --accent-hover: #1177bb;
+  --accent-soft: rgba(55, 148, 255, 0.15);
+  --ok: #4ec9b0;
+  --warn: #d7ba7d;
+  --err: #f48771;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -22,6 +45,7 @@ body {
   color: var(--text);
   font-size: 14px;
   user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .app {
@@ -30,10 +54,13 @@ body {
   padding: 20px 24px 40px;
 }
 
+/* ---------- 顶栏 ---------- */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 16px;
 }
 
@@ -47,7 +74,8 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), #7b5cff);
+  background: linear-gradient(135deg, #0078d4, #7b5cff);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -64,6 +92,13 @@ h1 {
   margin: 2px 0 0;
   color: var(--text-dim);
   font-size: 12px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .sync-state {
@@ -83,41 +118,98 @@ h1 {
 .dot-paused { background: var(--warn); }
 .dot-off { background: var(--text-dim); }
 
+/* ---------- 分段选择器（主题切换） ---------- */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.seg button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.seg button + button { border-left: 1px solid var(--panel-border); }
+.seg button:hover { color: var(--text); border-color: transparent; }
+
+.seg button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.seg-sm button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ---------- 标签页 ---------- */
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 16px;
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .tabs button {
+  position: relative;
   background: transparent;
-  border: 1px solid var(--panel-border);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--text-dim);
-  border-radius: 8px;
-  padding: 6px 18px;
+  padding: 8px 16px;
   cursor: pointer;
+  font-size: 14px;
 }
+
+.tabs button:hover { color: var(--text); border-color: transparent; }
 
 .tabs button.active {
-  background: var(--panel);
   color: var(--text);
-  border-color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
+.dirty-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ---------- 横幅 ---------- */
 .banner {
-  background: rgba(245, 166, 35, 0.12);
-  border: 1px solid rgba(245, 166, 35, 0.4);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   color: var(--warn);
   border-radius: 8px;
   padding: 8px 12px;
 }
 
 .banner-ok {
-  background: rgba(62, 207, 142, 0.1);
-  border-color: rgba(62, 207, 142, 0.4);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
   color: var(--ok);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
 }
 
+.banner-close { opacity: 0.7; font-size: 15px; }
+
+/* ---------- 页面与卡片 ---------- */
 .page {
   display: flex;
   flex-direction: column;
@@ -133,8 +225,9 @@ h1 {
 .card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 14px 16px;
+  box-shadow: var(--shadow);
 }
 
 .card.warn { border-color: var(--err); }
@@ -153,8 +246,9 @@ h1 {
 .panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 14px 16px;
+  box-shadow: var(--shadow);
 }
 
 .panel h3 {
@@ -165,6 +259,20 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+.panel h4 {
+  margin: 14px 0 4px;
+  font-size: 13px;
+  color: var(--text);
+  border-top: 1px solid var(--panel-border);
+  padding-top: 12px;
+}
+
+.panel h4:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 4px;
+}
+
 .row {
   display: flex;
   justify-content: space-between;
@@ -173,6 +281,16 @@ h1 {
 
 .row span { color: var(--text-dim); }
 
+.panel-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+}
+
+/* ---------- 文献库 ---------- */
 .lib {
   display: flex;
   align-items: center;
@@ -182,13 +300,17 @@ h1 {
   flex-wrap: wrap;
 }
 
+.lib:first-of-type { border-top: none; }
+
 .tag {
-  background: rgba(79, 140, 255, 0.15);
+  background: var(--accent-soft);
   color: var(--accent);
   border-radius: 6px;
   padding: 2px 8px;
   font-size: 12px;
 }
+
+:root[data-theme="dark"] .tag { color: #3794ff; }
 
 .lib-name { font-weight: 600; }
 .lib-meta { color: var(--text-dim); font-size: 12px; }
@@ -196,17 +318,40 @@ h1 {
 .lib-state.off { color: var(--text-dim); }
 .lib-error { width: 100%; color: var(--err); font-size: 12px; margin: 4px 0 0; }
 
-.actions {
+/* ---------- 目录与日志（可点击行） ---------- */
+.link-row {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border-top: 1px solid var(--panel-border);
 }
 
+.link-row:first-of-type { border-top: none; }
+.link-row:hover { background: var(--accent-soft); }
+
+.link-row span {
+  color: var(--accent);
+  width: 90px;
+  flex-shrink: 0;
+}
+
+:root[data-theme="dark"] .link-row span { color: #3794ff; }
+
+.link-row em {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: normal;
+}
+
+/* ---------- 按钮 ---------- */
 button {
-  background: var(--panel);
+  background: var(--input-bg);
   border: 1px solid var(--panel-border);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 8px 16px;
   cursor: pointer;
   font-size: 13px;
@@ -222,6 +367,22 @@ button.primary {
   font-weight: 600;
 }
 
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+button.danger:not(:disabled) {
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 50%, transparent);
+}
+
+button.danger:hover:not(:disabled) {
+  border-color: var(--err);
+  background: color-mix(in srgb, var(--err) 8%, transparent);
+}
+
+/* ---------- 表单 ---------- */
 .field {
   display: flex;
   align-items: center;
@@ -239,26 +400,57 @@ button.primary {
 .field input[type="number"],
 .field select {
   flex: 1;
-  background: var(--bg);
+  background: var(--input-bg);
   border: 1px solid var(--panel-border);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 7px 10px;
   font-size: 13px;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .field.checkbox > span { width: auto; }
 
 .hint {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
-  color: #8a8f98;
+  color: var(--text-dim);
+  line-height: 1.6;
 }
 
+/* ---------- 保存栏（吸底） ---------- */
+.save-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.save-hint {
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.save-hint.ok { color: var(--text-dim); }
+
+/* ---------- 诊断输出 ---------- */
 .doctor {
   margin: 0;
   white-space: pre-wrap;
   font-family: Consolas, "Courier New", monospace;
   font-size: 13px;
   line-height: 1.7;
+  user-select: text;
 }

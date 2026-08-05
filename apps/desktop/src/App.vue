@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
 interface LibraryView {
@@ -47,15 +47,40 @@ interface Config {
   storage: { database: string };
 }
 
+type ThemeMode = "light" | "dark" | "system";
+
+const THEME_KEY = "zsb-theme-mode";
+const themeMode = ref<ThemeMode>((localStorage.getItem(THEME_KEY) as ThemeMode) || "system");
+const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+function applyTheme() {
+  const dark = themeMode.value === "dark" || (themeMode.value === "system" && systemDark.value);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+
+watch(themeMode, (m) => {
+  localStorage.setItem(THEME_KEY, m);
+  applyTheme();
+});
+watch(systemDark, applyTheme);
+
 const tab = ref<"status" | "settings" | "doctor">("status");
 const status = ref<StatusView | null>(null);
 const config = ref<Config | null>(null);
+const savedSnapshot = ref("");
 const doctorLines = ref<string[]>([]);
 const busy = ref(false);
 const message = ref("");
 const tauriAvailable = ref(true);
 
+const dirty = computed(
+  () => config.value !== null && JSON.stringify(config.value) !== savedSnapshot.value
+);
+
 let timer: number | undefined;
+let themeTimer: number | undefined;
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+const onSystemTheme = (e: MediaQueryListEvent) => (systemDark.value = e.matches);
 
 async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -106,7 +131,10 @@ async function openDir(which: string) {
 
 async function loadConfig() {
   const c = await safeInvoke<Config>("get_config");
-  if (c) config.value = c;
+  if (c) {
+    config.value = c;
+    savedSnapshot.value = JSON.stringify(c);
+  }
 }
 
 async function saveConfig() {
@@ -114,7 +142,10 @@ async function saveConfig() {
   busy.value = true;
   try {
     const r = await safeInvoke<string>("save_config", { config: config.value });
-    if (r !== null) message.value = r;
+    if (r !== null) {
+      message.value = r;
+      savedSnapshot.value = JSON.stringify(config.value);
+    }
   } finally {
     busy.value = false;
   }
@@ -140,12 +171,21 @@ function fmtTime(iso: string | null): string {
 }
 
 onMounted(async () => {
+  applyTheme();
+  darkQuery.addEventListener("change", onSystemTheme);
+  // 跟随系统模式下轮询系统主题（部分 Windows 环境 change 事件不可靠）
+  themeTimer = window.setInterval(() => {
+    if (themeMode.value === "system") systemDark.value = darkQuery.matches;
+  }, 1000);
+
   await Promise.all([refreshStatus(), loadConfig()]);
   timer = window.setInterval(refreshStatus, 3000);
 });
 
 onUnmounted(() => {
   if (timer) window.clearInterval(timer);
+  if (themeTimer) window.clearInterval(themeTimer);
+  darkQuery.removeEventListener("change", onSystemTheme);
 });
 </script>
 
@@ -159,27 +199,44 @@ onUnmounted(() => {
           <p class="subtitle">本地文献检索桥</p>
         </div>
       </div>
-      <div class="sync-state" v-if="status">
-        <span
-          class="dot"
-          :class="status.paused ? 'dot-paused' : status.zotero_running ? 'dot-ok' : 'dot-off'"
-        ></span>
-        <span v-if="status.paused">已暂停</span>
-        <span v-else-if="status.zotero_running">同步中</span>
-        <span v-else>等待 Zotero</span>
+      <div class="topbar-right">
+        <div class="sync-state" v-if="status">
+          <span
+            class="dot"
+            :class="status.paused ? 'dot-paused' : status.zotero_running ? 'dot-ok' : 'dot-off'"
+          ></span>
+          <span v-if="status.paused">已暂停</span>
+          <span v-else-if="status.zotero_running">同步中</span>
+          <span v-else>等待 Zotero</span>
+        </div>
+        <div class="seg seg-sm" role="radiogroup" aria-label="主题">
+          <button :class="{ active: themeMode === 'light' }" @click="themeMode = 'light'">
+            浅色
+          </button>
+          <button :class="{ active: themeMode === 'dark' }" @click="themeMode = 'dark'">
+            深色
+          </button>
+          <button :class="{ active: themeMode === 'system' }" @click="themeMode = 'system'">
+            跟随系统
+          </button>
+        </div>
       </div>
     </header>
 
     <nav class="tabs">
       <button :class="{ active: tab === 'status' }" @click="tab = 'status'">状态</button>
-      <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
+      <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">
+        设置<span v-if="dirty" class="dirty-dot" title="有未保存的修改"></span>
+      </button>
       <button :class="{ active: tab === 'doctor' }" @click="tab = 'doctor'">诊断</button>
     </nav>
 
     <p v-if="!tauriAvailable" class="banner">
       未检测到 Tauri 运行环境：浏览器预览模式下数据不可用，请在桌面程序中查看。
     </p>
-    <p v-if="message" class="banner banner-ok">{{ message }}</p>
+    <p v-if="message" class="banner banner-ok" @click="message = ''">
+      {{ message }}<span class="banner-close">×</span>
+    </p>
 
     <!-- 状态页 -->
     <section v-if="tab === 'status' && status" class="page">
@@ -203,8 +260,16 @@ onUnmounted(() => {
       </div>
 
       <div class="panel">
+        <h3>同步控制</h3>
         <div class="row"><span>当前实例</span><b>{{ status.instance || "未知" }}</b></div>
         <div class="row"><span>最近同步</span><b>{{ fmtTime(status.last_sync_at) }}</b></div>
+        <div class="panel-actions">
+          <button class="primary" :disabled="busy" @click="syncNow">立即同步</button>
+          <button :disabled="busy" @click="togglePause">
+            {{ status.paused ? "恢复同步" : "暂停同步" }}
+          </button>
+          <button class="danger" :disabled="busy" @click="rebuildIndex">重建索引</button>
+        </div>
       </div>
 
       <div class="panel">
@@ -220,25 +285,68 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="actions">
-        <button class="primary" :disabled="busy" @click="syncNow">立即同步</button>
-        <button :disabled="busy" @click="togglePause">
-          {{ status.paused ? "恢复同步" : "暂停同步" }}
-        </button>
-        <button :disabled="busy" @click="rebuildIndex">重建索引</button>
-        <button @click="openDir('mirror')">打开镜像目录</button>
-        <button @click="openDir('config')">打开配置目录</button>
-        <button @click="openDir('logs')">查看日志</button>
+      <div class="panel">
+        <h3>目录与日志</h3>
+        <div class="link-row" @click="openDir('mirror')">
+          <span>镜像目录</span><em>Listary 索引此目录以定位文献</em>
+        </div>
+        <div class="link-row" @click="openDir('config')">
+          <span>配置目录</span><em>config.toml 所在位置</em>
+        </div>
+        <div class="link-row" @click="openDir('logs')">
+          <span>日志目录</span><em>排查同步问题时查看</em>
+        </div>
       </div>
     </section>
 
     <!-- 设置页 -->
     <section v-if="tab === 'settings' && config" class="page">
       <div class="panel">
-        <h3>同步</h3>
+        <h3>外观</h3>
+        <div class="seg" role="radiogroup" aria-label="主题">
+          <button :class="{ active: themeMode === 'light' }" @click="themeMode = 'light'">
+            浅色
+          </button>
+          <button :class="{ active: themeMode === 'dark' }" @click="themeMode = 'dark'">
+            深色
+          </button>
+          <button :class="{ active: themeMode === 'system' }" @click="themeMode = 'system'">
+            跟随系统
+          </button>
+        </div>
+        <p class="hint">“跟随系统”会随 Windows 深/浅色自动切换，并每秒轮询一次系统状态。</p>
+      </div>
+
+      <div class="panel">
+        <h3>常规</h3>
+        <label class="field checkbox">
+          <input type="checkbox" v-model="config.app.start_at_login" />
+          <span>开机自动启动</span>
+        </label>
         <label class="field">
           <span>轮询周期（秒）</span>
           <input type="number" v-model.number="config.app.poll_interval_seconds" min="5" />
+        </label>
+        <label class="field">
+          <span>日志级别</span>
+          <select v-model="config.app.log_level">
+            <option value="error">error</option>
+            <option value="warn">warn</option>
+            <option value="info">info</option>
+            <option value="debug">debug</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="panel">
+        <h3>Zotero 连接</h3>
+        <label class="field">
+          <span>Local API 地址</span>
+          <input type="text" v-model="config.zotero.api_base" />
+        </label>
+        <label class="field">
+          <span>请求超时（秒）</span>
+          <input type="number" v-model.number="config.zotero.request_timeout_seconds" min="1" />
         </label>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.zotero.include_user_library" />
@@ -251,21 +359,29 @@ onUnmounted(() => {
             <option value="none">不索引</option>
           </select>
         </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.app.start_at_login" />
-          <span>开机自动启动</span>
-        </label>
       </div>
 
       <div class="panel">
-        <h3>搜索</h3>
+        <h3>搜索与索引</h3>
         <label class="field">
           <span>默认结果数</span>
           <input type="number" v-model.number="config.search.default_limit" min="1" max="100" />
         </label>
+        <label class="field">
+          <span>结果数上限</span>
+          <input type="number" v-model.number="config.search.maximum_limit" min="1" max="500" />
+        </label>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.search.index_abstract" />
           <span>索引摘要</span>
+        </label>
+        <label class="field checkbox">
+          <input type="checkbox" v-model="config.search.index_extra" />
+          <span>索引 Extra 字段</span>
+        </label>
+        <label class="field checkbox">
+          <input type="checkbox" v-model="config.search.short_query_fallback" />
+          <span>短查询回退（单字也走 LIKE 兜底）</span>
         </label>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.search.store_raw_json" />
@@ -274,7 +390,8 @@ onUnmounted(() => {
       </div>
 
       <div class="panel">
-        <h3>Windows 镜像（Listary）</h3>
+        <h3>镜像（外部工具定位）</h3>
+        <h4>Windows · .url（Listary）</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.windows.enabled" />
           <span>启用 .url 镜像</span>
@@ -287,10 +404,7 @@ onUnmounted(() => {
           <span>文件名模板</span>
           <input type="text" v-model="config.mirror.windows.template" />
         </label>
-      </div>
-
-      <div class="panel">
-        <h3>macOS 镜像（.webloc，默认关闭）</h3>
+        <h4>macOS · .webloc</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.macos.enabled" />
           <span>启用 .webloc 镜像</span>
@@ -304,21 +418,32 @@ onUnmounted(() => {
       <div class="panel">
         <h3>存储</h3>
         <label class="field">
-          <span>索引数据库路径（留空 = 默认位置，支持 %VAR% 和 ~）</span>
+          <span>索引数据库路径</span>
           <input type="text" v-model="config.storage.database" placeholder="留空使用默认位置" />
         </label>
-        <p class="hint">修改数据库路径后需重启程序生效；已有索引不会自动迁移。</p>
+        <p class="hint">
+          留空 = 默认位置（便携模式为 exe 旁 data\）；支持 %VAR% 和 ~。
+          修改后需重启程序生效，已有索引不会自动迁移。
+        </p>
       </div>
 
-      <div class="actions">
-        <button class="primary" :disabled="busy" @click="saveConfig">保存设置</button>
+      <div class="save-bar">
+        <span v-if="dirty" class="save-hint">有未保存的修改</span>
+        <span v-else class="save-hint ok">设置已保存</span>
+        <button class="primary" :disabled="busy || !dirty" @click="saveConfig">保存设置</button>
       </div>
     </section>
 
     <!-- 诊断页 -->
     <section v-if="tab === 'doctor'" class="page">
-      <div class="actions">
-        <button class="primary" :disabled="busy" @click="runDoctor">运行诊断</button>
+      <div class="panel">
+        <h3>环境诊断</h3>
+        <p class="hint">
+          检查 Zotero 本地 API 连通性、数据库与镜像目录可写性。同步异常时先运行诊断。
+        </p>
+        <div class="panel-actions">
+          <button class="primary" :disabled="busy" @click="runDoctor">运行诊断</button>
+        </div>
       </div>
       <div class="panel" v-if="doctorLines.length">
         <pre class="doctor">{{ doctorLines.join("\n") }}</pre>

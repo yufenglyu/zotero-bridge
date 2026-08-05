@@ -1,3 +1,6 @@
+// Prevent an extra console window from staying open on Windows in release.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! Zotero Search Bridge desktop app (M4): system tray + settings window.
 //!
 //! All sync, index and file work reuses the shared crates; the frontend

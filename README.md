@@ -123,6 +123,20 @@ cargo build --release -p zsb-desktop
 前端联调：`npm run dev` 启动 Vite 开发服务器（浏览器预览会提示无
 Tauri 环境，属正常；完整功能需运行桌面程序）。
 
+界面支持浅色 / 深色 / 跟随系统三种主题（VS Code 风格配色，
+跟随系统模式每秒轮询一次系统主题）。
+
+## 打包与发布
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1
+# 跳过构建直接打包：加 -SkipBuild
+```
+
+产物统一输出到 `target\dist\`（免安装便携版 zip + NSIS/MSI 安装包）。
+发布时推送 tag 触发 `.github/workflows/release.yml`，或把 `target\dist\`
+下的文件手动附加到 GitHub Release。
+
 ## 兼容性说明：Zotero 10.0-beta 的对象版本
 
 部分 Zotero 10.0 beta 构建的 Local API 不返回对象版本

@@ -47,12 +47,31 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
 - 文档：`docs/release.md`（签名/公证/版本迁移/检查单）、
   `docs/troubleshooting.md`（故障诊断表）。
 
-### 便携版（最后一次提交）
+### 便携版 + 打包脚本（2026-08-05）
 
-- `zsb-portable-v0.1.0-windows-x64.zip`（9.4 MB，仓库根目录）：CLI +
-  桌面程序 + `说明.txt`；解压到临时目录实测 `search` / `status` 可用。
-- 注意：zip 被提交进了 git（9.4 MB），如介意仓库体积可改为 gitignore
-  并只通过 Release 分发。
+- 便携版 zip 改为输出到 `target\dist\zsb-portable-v0.1.0-windows-x64.zip`，
+  不再提交进 git；新增 `scripts\release.ps1`（构建前端 + release 二进制 +
+  组装 zip + 复制 NSIS/MSI 安装包，`-SkipBuild` 可跳过构建）。
+- 静态打包资源保留在 `dist-portable\`（说明.txt、zsb-config.toml）；
+  脚本从 `target\release\` 取 exe 组装到 `target\portable\` 再压缩。
+- 坑：Windows PowerShell 5.1 把无 BOM 的 UTF-8 脚本按 GBK 解析，
+  中文注释会导致莫名其妙的语法错误 → 脚本统一用纯 ASCII 编写。
+- 坑：`Copy-Item "dist-portable\*"` 在目录被误删后报 PathNotFound；
+  dist-portable 曾被一次误操作从工作区删除，用 `git checkout -- dist-portable` 恢复。
+
+### 桌面端修复与 UI 重构（2026-08-05）
+
+- **常驻命令行窗口**：main.rs 缺 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`，
+  release exe 是 console 子系统 → 已修复，新 exe PE subsystem = 2 (GUI)。
+- **主题**：CSS 变量双主题（VS Code Light+/Dark+ 近似配色），
+  `data-theme` 挂在 `<html>`；浅色/深色/跟随系统三档，localStorage
+  `zsb-theme-mode` 持久化；跟随系统 = matchMedia change 监听 + 每秒轮询兜底。
+- **分组重构**：状态页 = 概览卡片 / 同步控制（按钮收进 panel）/
+  文献库 / 目录与日志（可点击行）；设置页 = 外观 / 常规 / Zotero 连接 /
+  搜索与索引 / 镜像（Win+macOS 合并）/ 存储，新增吸底保存栏与脏标记
+  （设置 tab 上的橙点）；诊断页加说明文字。
+- 设置页补齐了此前未暴露的字段：log_level、api_base、request_timeout、
+  maximum_limit、index_extra、short_query_fallback。
 
 ### 自定义路径（配置与索引，2026-08-04 晚）
 
