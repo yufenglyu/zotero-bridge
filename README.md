@@ -30,8 +30,14 @@ SQLite FTS5        文件镜像管理器 (zsb-mirror)
 
 ```sh
 cargo build --release        # 生成 target/release/zsb.exe
-cargo test --workspace       # 55 个单元/集成测试
+cargo test --workspace       # 单元/集成测试
+python scripts/verify_filenames.py   # 模板回归：与 Zotero 附件重命名结果逐字比对
 ```
+
+`verify_filenames.py` 以 Zotero 实际重命名后的附件文件名为基准，抽查 10 种
+条目类型的链接名是否逐字一致（需 Zotero 正在运行且已同步过）。修改
+`crates/mirror/src/ztemplate.rs` 后应运行一次；不一致项需人工甄别是否为
+Zotero 侧旧模板/旧元数据重命名的遗留文件。
 
 ## 快速开始
 
