@@ -399,7 +399,31 @@ fn plan_mirror_jobs(
     if let Some(first) = platforms.first() {
         let template = &config.mirror_for(*first).template;
         for item in upserts.iter_mut() {
-            item.mirror_filename = Some(filename::render(template, item));
+            item.mirror_filename = Some(filename::render_auto(template, item));
+        }
+
+        // Collision fallback: Zotero-style templates carry no item key, so
+        // two items can render to the same base name and fight over one
+        // file. Append the item key to later duplicates (existing names of
+        // untouched items count as taken too).
+        let mut taken: HashMap<String, String> = HashMap::new();
+        for (k, v) in existing_names {
+            taken.entry(v.clone()).or_insert_with(|| k.clone());
+        }
+        for item in upserts.iter_mut() {
+            let Some(base) = item.mirror_filename.clone() else {
+                continue;
+            };
+            match taken.get(&base) {
+                Some(owner) if *owner != item.item_key => {
+                    let unique = filename::with_key_suffix(&base, &item.item_key);
+                    taken.insert(unique.clone(), item.item_key.clone());
+                    item.mirror_filename = Some(unique);
+                }
+                _ => {
+                    taken.insert(base, item.item_key.clone());
+                }
+            }
         }
     }
 
@@ -412,7 +436,7 @@ fn plan_mirror_jobs(
             let base = item
                 .mirror_filename
                 .clone()
-                .unwrap_or_else(|| filename::render(template, item));
+                .unwrap_or_else(|| filename::render_auto(template, item));
             let new_path = dir
                 .join(format!("{base}.{}", backend.extension()))
                 .to_string_lossy()
@@ -462,6 +486,118 @@ fn plan_mirror_jobs(
 
 fn short_id(server_id: &str) -> String {
     server_id.chars().take(8).collect()
+}
+
+/// Outcome of a mirror refresh pass.
+#[derive(Debug, Clone, Default)]
+pub struct MirrorRefreshReport {
+    pub renamed: usize,
+    pub rewritten: usize,
+    pub unchanged: usize,
+}
+
+/// Re-render every indexed item's mirror filename with the current
+/// template and enqueue the jobs needed to bring the shortcut directory
+/// back in sync with the database: Rename for changed names, Create for
+/// files missing on disk. Stored filenames and jobs commit in the same
+/// transaction (outbox pattern), so a crash mid-refresh is recoverable.
+pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefreshReport> {
+    let platforms = enabled_platforms(config);
+    if platforms.is_empty() {
+        return Ok(MirrorRefreshReport::default());
+    }
+    let template = config.mirror_for(platforms[0]).template.clone();
+    let mut report = MirrorRefreshReport::default();
+
+    for lib in db.list_libraries(None)? {
+        let items = db.items_for_library(lib.id)?;
+        if items.is_empty() {
+            continue;
+        }
+
+        // Re-render every item, deduplicating against all names in the
+        // library (same collision fallback as the sync planner).
+        let mut taken: HashMap<String, String> = HashMap::new();
+        let mut new_names: Vec<String> = Vec::with_capacity(items.len());
+        for item in &items {
+            let mut base = filename::render_auto(&template, item);
+            if taken
+                .get(&base)
+                .is_some_and(|owner| *owner != item.item_key)
+            {
+                base = filename::with_key_suffix(&base, &item.item_key);
+            }
+            taken.insert(base.clone(), item.item_key.clone());
+            new_names.push(base);
+        }
+
+        let mut upserts = Vec::new();
+        let mut jobs = Vec::new();
+        for (item, base) in items.iter().zip(new_names) {
+            let old = item.mirror_filename.clone();
+            let name_changed = old.as_deref() != Some(base.as_str());
+            for &platform in &platforms {
+                let backend = backend_for(platform);
+                let dir = config.mirror_dir(platform);
+                let new_path = dir.join(format!("{base}.{}", backend.extension()));
+                if !name_changed && new_path.exists() {
+                    continue;
+                }
+                let content = backend.build_content(&item.select_uri);
+                let new_path_s = new_path.to_string_lossy().into_owned();
+                if name_changed && old.is_some() {
+                    let old_path = dir
+                        .join(format!(
+                            "{}.{}",
+                            old.as_deref().unwrap_or_default(),
+                            backend.extension()
+                        ))
+                        .to_string_lossy()
+                        .into_owned();
+                    jobs.push(NewMirrorJob {
+                        operation: MirrorOperation::Rename,
+                        platform,
+                        old_path: Some(old_path),
+                        new_path: Some(new_path_s),
+                        content: Some(content),
+                    });
+                    report.renamed += 1;
+                } else {
+                    jobs.push(NewMirrorJob {
+                        operation: MirrorOperation::Create,
+                        platform,
+                        old_path: None,
+                        new_path: Some(new_path_s),
+                        content: Some(content),
+                    });
+                    report.rewritten += 1;
+                }
+            }
+            if name_changed {
+                let mut updated = item.clone();
+                updated.mirror_filename = Some(base);
+                upserts.push(updated);
+            } else {
+                report.unchanged += 1;
+            }
+        }
+
+        if upserts.is_empty() && jobs.is_empty() {
+            continue;
+        }
+        let version = db.library_state(lib.id)?.last_version;
+        db.apply_sync_batch(
+            lib.id,
+            &SyncBatch {
+                new_version: version,
+                deleted_keys: vec![],
+                mirror_jobs: jobs,
+                upserts,
+            },
+            config.search.store_raw_json,
+        )?;
+    }
+    Ok(report)
 }
 
 fn uuid_v4() -> String {
@@ -541,5 +677,102 @@ mod tests {
         let jobs = plan_mirror_jobs(&cfg, &mut [], &[], &HashMap::new());
         assert!(jobs.is_empty());
         let _ = LibraryKind::User;
+    }
+
+    #[test]
+    fn zotero_template_collisions_get_key_suffix() {
+        let mut cfg = test_config();
+        cfg.mirror.windows.template = "【{{authors}}】{{title}}".into();
+        let item = |key: &str| zsb_core::IndexedItem {
+            item_key: key.into(),
+            primary_creator: "张三".into(),
+            year: "2024".into(),
+            title: "燃气轮机研究".into(),
+            select_uri: format!("zotero://select/library/items/{key}"),
+            ..Default::default()
+        };
+        let mut upserts = vec![item("AAAA0001"), item("BBBB0002")];
+        let jobs = plan_mirror_jobs(&cfg, &mut upserts, &[], &HashMap::new());
+        // Identical render output: the second item must be disambiguated.
+        assert_eq!(
+            upserts[0].mirror_filename.as_deref(),
+            Some("【张三】燃气轮机研究")
+        );
+        assert_eq!(
+            upserts[1].mirror_filename.as_deref(),
+            Some("【张三】燃气轮机研究 -- BBBB0002")
+        );
+        assert_eq!(jobs.len(), 2);
+    }
+
+    #[test]
+    fn refresh_renames_changed_and_rewrites_missing() {
+        let dir = std::env::temp_dir().join(format!("zsb-refresh-{}", uuid_v4()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut cfg = test_config();
+        cfg.mirror.windows.directory = dir.to_string_lossy().into_owned();
+
+        let mut db = Database::open_in_memory().unwrap();
+        db.upsert_instance(&zsb_core::ServerInfo {
+            api_base: "http://localhost:23119/api".into(),
+            api_version: Some(3),
+            schema_version: None,
+            server_id: "srv".into(),
+        })
+        .unwrap();
+        let lib_id = db.upsert_library("srv", &RemoteLibrary::user()).unwrap();
+
+        let item = |key: &str, creator: &str, stored: &str| zsb_core::IndexedItem {
+            item_key: key.into(),
+            item_version: 1,
+            item_type: "journalArticle".into(),
+            title: "燃气轮机研究".into(),
+            primary_creator: creator.into(),
+            year: "2024".into(),
+            select_uri: format!("zotero://select/library/items/{key}"),
+            mirror_filename: Some(stored.into()),
+            content_hash: format!("h-{key}"),
+            ..Default::default()
+        };
+        // A: stored name is stale -> rename. B: stored name matches the
+        // current template but the file is missing -> rewrite.
+        let a = item("AAAA0001", "张三", "旧名字 -- AAAA0001");
+        let b_rendered = filename::render_auto(
+            &cfg.mirror.windows.template,
+            &item("BBBB0002", "李四", "ignored"),
+        );
+        let b = item("BBBB0002", "李四", &b_rendered);
+        db.apply_sync_batch(
+            lib_id,
+            &SyncBatch {
+                new_version: 1,
+                deleted_keys: vec![],
+                mirror_jobs: vec![],
+                upserts: vec![a, b],
+            },
+            true,
+        )
+        .unwrap();
+        // Only A's file exists on disk (stale name).
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("旧名字 -- AAAA0001.url"), "x").unwrap();
+
+        let report = refresh_mirrors(&mut db, &cfg).unwrap();
+        assert_eq!(report.renamed, 1);
+        assert_eq!(report.rewritten, 1);
+
+        zsb_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
+        assert!(!dir.join("旧名字 -- AAAA0001.url").exists());
+        assert!(dir
+            .join("张三 - 2024 - 燃气轮机研究 -- AAAA0001.url")
+            .exists());
+        assert!(dir
+            .join("李四 - 2024 - 燃气轮机研究 -- BBBB0002.url")
+            .exists());
+
+        // Second refresh is a no-op.
+        let report = refresh_mirrors(&mut db, &cfg).unwrap();
+        assert_eq!((report.renamed, report.rewritten), (0, 0));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -211,6 +211,32 @@ fn rebuild_index(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn refresh_links(state: State<'_, AppState>) -> Result<String, String> {
+    let cfg = state.config.read().unwrap().clone();
+    let mut db = Database::open(&state.db_path).map_err(|e| e.to_string())?;
+    let report = zsb_sync::refresh_mirrors(&mut db, &cfg).map_err(|e| e.to_string())?;
+    let mut completed = 0usize;
+    let mut failed = 0usize;
+    for platform in zsb_sync::enabled_platforms(&cfg) {
+        let w =
+            zsb_mirror::worker::process_pending(&db, platform, 10000).map_err(|e| e.to_string())?;
+        completed += w.completed;
+        failed += w.failed;
+    }
+    Ok(format!(
+        "快捷方式已刷新：改名 {}，补写 {}，无需变动 {}{}",
+        report.renamed,
+        report.rewritten,
+        report.unchanged,
+        if failed > 0 {
+            format!("（{} 项写入失败，可在诊断页排查）", failed)
+        } else {
+            format!("（写入 {} 项）", completed)
+        }
+    ))
+}
+
+#[tauri::command]
 fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), String> {
     let cfg = state.config.read().unwrap().clone();
     let dir = match which.as_str() {
@@ -432,6 +458,7 @@ fn main() {
             get_config,
             save_config,
             rebuild_index,
+            refresh_links,
             open_dir,
             doctor,
         ])

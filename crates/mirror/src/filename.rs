@@ -71,6 +71,40 @@ fn substitute(template: &str, item: &IndexedItem, title: &str) -> String {
     out.trim_matches(|c| c == ' ' || c == '-').to_string()
 }
 
+/// Render with automatic syntax detection: templates containing `{{` use
+/// the Zotero filename template syntax (ztemplate.rs); anything else uses
+/// the legacy `{placeholder}` syntax.
+///
+/// Unlike the legacy renderer, Zotero templates are NOT forced to include
+/// `{item_key}`: uniqueness is handled by the sync engine's collision
+/// fallback (appending ` -- <key>` only when two items would produce the
+/// same filename).
+pub fn render_auto(template: &str, item: &IndexedItem) -> String {
+    if !crate::ztemplate::is_zotero_template(template) {
+        return render(template, item);
+    }
+    let raw = crate::ztemplate::render(template, item);
+    let mut name = sanitize(raw.trim());
+    if name.chars().count() > MAX_BASENAME_CHARS {
+        name = name.chars().take(MAX_BASENAME_CHARS).collect();
+        name = name.trim_end_matches([' ', '.']).to_string();
+    }
+    if name.is_empty() {
+        name = format!("untitled -- {}", item.item_key);
+    }
+    name
+}
+
+/// Append ` -- <item_key>` to a base filename, keeping the total within
+/// the length budget. Used by the engine when a rendered name collides
+/// with another item's.
+pub fn with_key_suffix(base: &str, item_key: &str) -> String {
+    let suffix = format!(" -- {item_key}");
+    let budget = MAX_BASENAME_CHARS.saturating_sub(suffix.chars().count());
+    let head: String = base.chars().take(budget).collect();
+    format!("{}{}", head.trim_end_matches([' ', '.']), suffix)
+}
+
 /// Make a string safe as a filename on Windows and macOS.
 pub fn sanitize(input: &str) -> String {
     let mut out = String::with_capacity(input.len());

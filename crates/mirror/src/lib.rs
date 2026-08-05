@@ -7,6 +7,7 @@ pub mod filename;
 pub mod macos_webloc;
 pub mod windows_url;
 pub mod worker;
+pub mod ztemplate;
 
 use zsb_core::Platform;
 

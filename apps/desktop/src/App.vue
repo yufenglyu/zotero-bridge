@@ -125,6 +125,18 @@ async function rebuildIndex() {
   }
 }
 
+async function refreshLinks() {
+  busy.value = true;
+  message.value = "";
+  try {
+    const r = await safeInvoke<string>("refresh_links");
+    if (r !== null) message.value = r;
+  } finally {
+    busy.value = false;
+    await refreshStatus();
+  }
+}
+
 async function openDir(which: string) {
   await safeInvoke("open_dir", { which });
 }
@@ -258,15 +270,15 @@ onUnmounted(() => {
         <div class="card">
           <div class="card-value">{{ status.pending_jobs }}</div>
           <div class="card-label">
-            待执行镜像任务
-            <i class="help" title="等待写入镜像目录的 .url 快捷方式数量。同步后自动生成，正常情况下会很快清零；程序崩溃未完成的任务会在下次启动时继续。">?</i>
+            待写入快捷方式
+            <i class="help" title="等待写入快捷方式目录的 .url 文件数量。同步后自动生成，正常情况下会很快清零；程序崩溃未完成的任务会在下次启动时继续。">?</i>
           </div>
         </div>
         <div class="card" :class="{ warn: status.failed_jobs > 0 }">
           <div class="card-value">{{ status.failed_jobs }}</div>
           <div class="card-label">
             失败任务
-            <i class="help" title="多次重试仍失败的镜像任务。可在诊断页排查镜像目录可写性，或使用“重建索引”。">?</i>
+            <i class="help" title="多次重试仍失败的快捷方式写入任务。可在诊断页排查目录可写性，或使用“重建索引”。">?</i>
           </div>
         </div>
       </div>
@@ -320,13 +332,22 @@ onUnmounted(() => {
       <div class="panel">
         <h3>目录与日志</h3>
         <div class="link-row" @click="openDir('mirror')">
-          <span>镜像目录</span><em>Listary 索引此目录以定位文献</em>
+          <span>快捷方式目录</span><em>Listary 索引此目录以定位文献</em>
         </div>
         <div class="link-row" @click="openDir('config')">
           <span>配置目录</span><em>config.toml 所在位置</em>
         </div>
         <div class="link-row" @click="openDir('logs')">
           <span>日志目录</span><em>排查同步问题时查看</em>
+        </div>
+        <div class="panel-actions">
+          <button
+            :disabled="busy"
+            title="按当前文件名模板重新生成全部快捷方式：名字变化的改名、磁盘上缺失的补写。改了模板后点这里一次到位。"
+            @click="refreshLinks"
+          >
+            刷新快捷方式
+          </button>
         </div>
       </div>
     </section>
@@ -435,32 +456,37 @@ onUnmounted(() => {
 
       <div class="panel">
         <h3>
-          镜像（外部工具定位）
-          <i class="help" title="镜像 = 为每条文献在指定目录生成一个快捷方式文件（Windows 为 .url，macOS 为 .webloc），双击即用 zotero:// 协议定位到 Zotero 中的条目。把镜像目录加入 Listary / Alfred 等启动器索引，就能按作者、年份、标题搜索并跳转。">?</i>
+          快捷方式（外部工具定位）
+          <i class="help" title="为每条文献在指定目录生成一个快捷方式文件（Windows 为 .url，macOS 为 .webloc），双击即用 zotero:// 协议定位到 Zotero 中的条目。把快捷方式目录加入 Listary / Alfred 等启动器索引，就能按作者、年份、标题搜索并跳转。">?</i>
         </h3>
         <h4>Windows · .url（Listary）</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.windows.enabled" />
-          <span>启用 .url 镜像</span>
+          <span>启用 .url 快捷方式</span>
         </label>
         <label class="field">
-          <span>镜像目录</span>
+          <span>快捷方式目录</span>
           <input type="text" v-model="config.mirror.windows.directory" />
         </label>
-        <label class="field">
+        <label class="field field-top">
           <span>
             文件名模板
-            <i class="help" title="镜像 .url 文件的命名规则。可用变量：{primary_creator}（第一作者）、{year}（年份）、{title}（标题）、{item_key}（条目键）。">?</i>
+            <i class="help" title="支持两套语法：&#10;1. 简洁语法：{primary_creator}（第一作者）、{year}（年份）、{title}（标题）、{item_key}（条目键，自动附加保证不重名）。&#10;2. Zotero 模板语法（{{...}}，与 Zotero 附件重命名一致）：{{if itemType == &quot;journalArticle&quot;}}...{{endif}}、{{authors max=&quot;1&quot;}}、{{date replaceFrom=... replaceTo=...}} 等。模板含 {{ 即按 Zotero 语法解析。&#10;修改后保存，再到状态页点“刷新快捷方式”应用到全部条目。">?</i>
           </span>
-          <input type="text" v-model="config.mirror.windows.template" />
+          <textarea
+            rows="5"
+            spellcheck="false"
+            v-model="config.mirror.windows.template"
+            placeholder="{primary_creator} - {year} - {title} -- {item_key}"
+          ></textarea>
         </label>
         <h4>macOS · .webloc</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.macos.enabled" />
-          <span>启用 .webloc 镜像</span>
+          <span>启用 .webloc 快捷方式</span>
         </label>
         <label class="field">
-          <span>镜像目录</span>
+          <span>快捷方式目录</span>
           <input type="text" v-model="config.mirror.macos.directory" />
         </label>
       </div>

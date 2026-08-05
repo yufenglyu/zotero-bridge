@@ -90,6 +90,33 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
 - **重要**：用户实际运行的便携版在 `target\dist\zsb-portable\`（自行解压，
   data\ 在里面），修复后的 exe 已原地替换该目录下的两个 exe（2026-08-05
   17:21），用户重启程序即可，其 zsb-config.toml（有自定义）未动。
+  **该目录后来被用户删除**（19:1x），之后不再原地替换，只更新 zip。
+
+### Zotero 文件名模板 + 快捷方式刷新（2026-08-05 晚）
+
+- **`zsb_mirror::ztemplate`**：Zotero 7 附件重命名同款模板语法渲染器
+  （`{{if/elseif/else/endif}}`（可嵌套）、`field == "v"` / `!=` / 裸字段真值、
+  `{{authors max="1" initialize="given"}}`、`replaceFrom/replaceTo/regexOpts="g"`）。
+  模板含 `{{` 即按 Zotero 语法解析（`filename::render_auto`），否则走旧
+  `{placeholder}` 语法。取数自条目 `raw_json` 的完整 `data`（**ItemData 加了
+  `#[serde(flatten)] other` 保留全部字段**——此前 edition/number/versionNumber
+  会被 serde 丢弃，注释谎称"preserved"实际没有）；raw_json 缺失时回退到
+  IndexedItem 规范化列。
+- Zotero 模板**不强制 item_key 后缀**；重名时引擎自动追加 ` -- <key>`
+  （`filename::with_key_suffix`），plan_mirror_jobs 与 refresh 共用同一
+  消歧逻辑。长度超限硬截断到 180 字符。
+- **refresh-mirrors**：`zsb_sync::refresh_mirrors`（CLI `zsb refresh-mirrors`、
+  桌面端「刷新快捷方式」按钮）——全量重渲染文件名，改名变化的（Rename）、
+  磁盘缺失的补写（Create），存储名与任务同事务提交；新增
+  `db.items_for_library` 全量行查询。
+- **改名**：界面「镜像/镜像目录」→「快捷方式/快捷方式目录」（配置文件键名
+  不变）。设置页模板输入框改多行 textarea。
+- 测试：ztemplate 10 项 + 引擎碰撞/refresh 2 项，workspace 76 项全绿。
+- 坑：css 链式选择器编辑易截断规则链（.field input:focus 曾被误截），改
+  样式后必须回读检查。
+- 注意：**存量 raw_json 缺 flatten 前的字段**（edition/number/versionNumber），
+  需全量重同步（或 rebuild）后 Zotero 模板才能取到这些字段；此间模板渲染
+  优雅回退为空串。
 
 ### 自定义路径（配置与索引，2026-08-04 晚）
 

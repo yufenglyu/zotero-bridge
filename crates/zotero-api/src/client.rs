@@ -207,14 +207,20 @@ impl ZoteroSource for LocalApiClient {
             .await
             .map_err(Self::map_reqwest_err)?;
         if resp.status().as_u16() == 404 {
-            tracing::warn!("{}: /deleted unsupported (404); skipping deletion sync", url);
+            tracing::warn!(
+                "{}: /deleted unsupported (404); skipping deletion sync",
+                url
+            );
             return Ok(DeletedObjects::default());
         }
         let lm = Self::header_u64(&resp, "last-modified-version").unwrap_or(0);
         let resp = Self::checked(resp).await?;
         let body = resp.text().await.map_err(Self::map_reqwest_err)?;
         let deleted: DeletedResponse = serde_json::from_str(&body).map_err(|e| {
-            Error::Json(format!("{e}; body starts: {}", &body[..body.len().min(120)]))
+            Error::Json(format!(
+                "{e}; body starts: {}",
+                &body[..body.len().min(120)]
+            ))
         })?;
         Ok(DeletedObjects {
             deleted,

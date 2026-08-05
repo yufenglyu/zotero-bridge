@@ -710,6 +710,50 @@ impl Database {
             .optional()
             .map_err(migrations::db_err)
     }
+
+    /// Every indexed item of one library (full rows, used by the mirror
+    /// refresh to re-render filenames).
+    pub fn items_for_library(&self, library_id: i64) -> Result<Vec<IndexedItem>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, library_id, item_key, item_version, item_type,
+                        title, creators, primary_creator, year, container_title,
+                        tags, abstract_note, extra, date_modified, select_uri,
+                        mirror_filename, content_hash, raw_json
+                 FROM items WHERE library_id = ?1",
+            )
+            .map_err(migrations::db_err)?;
+        let rows = stmt
+            .query_map(params![library_id], |row| {
+                Ok(IndexedItem {
+                    id: row.get(0)?,
+                    library_id: row.get(1)?,
+                    item_key: row.get(2)?,
+                    item_version: row.get::<_, i64>(3)? as u64,
+                    item_type: row.get(4)?,
+                    title: row.get(5)?,
+                    creators: row.get(6)?,
+                    primary_creator: row.get(7)?,
+                    year: row.get(8)?,
+                    container_title: row.get(9)?,
+                    tags: row.get(10)?,
+                    abstract_note: row.get(11)?,
+                    extra: row.get(12)?,
+                    date_modified: row.get(13)?,
+                    select_uri: row.get(14)?,
+                    mirror_filename: row.get(15)?,
+                    content_hash: row.get(16)?,
+                    raw_json: row.get(17)?,
+                })
+            })
+            .map_err(migrations::db_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(migrations::db_err)?);
+        }
+        Ok(out)
+    }
 }
 
 fn open_connection(path: &Path) -> Result<Connection> {

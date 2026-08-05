@@ -45,7 +45,7 @@ zsb open --library user --key N49R8KAQ
 zsb status
 ```
 
-维护命令：`zsb rebuild` / `optimize` / `verify-index` / `clean-mirrors`。
+维护命令：`zsb rebuild` / `optimize` / `verify-index` / `clean-mirrors` / `refresh-mirrors`。
 
 ## 搜索语法
 
@@ -58,12 +58,27 @@ author:Smith turbine   # 字段限定：author / year / tag / type / library
 
 ## Windows + Listary
 
-1. `zsb sync`（或 `zsb sync --watch`）会在镜像目录自动维护 `.url` 文件：
+1. `zsb sync`（或 `zsb sync --watch`）会在快捷方式目录自动维护 `.url` 文件：
    `%LOCALAPPDATA%\ZoteroSearchBridge\mirrors\windows\`
 2. 在 Listary 索引设置中收录该目录（或把配置 `mirror.windows.directory`
    改到你已有的索引目录，如 `D:\Data\ZoteroLinks`）。
 3. 在 Listary 中按 作者 / 年份 / 标题 / Item Key 搜索，双击 `.url`
    即可定位到 Zotero 条目。
+
+### 文件名模板
+
+`mirror.windows.template` 支持两套语法（含 `{{` 即按 Zotero 语法解析）：
+
+- 简洁语法：`{primary_creator} - {year} - {title} -- {item_key}`
+- **Zotero 模板语法**（与 Zotero 附件重命名一致）：
+  `{{if itemType == "journalArticle"}}...{{elseif}}...{{else}}...{{endif}}`、
+  `{{authors max="1" initialize="given"}}`、
+  `{{date replaceFrom="[^0-9].*" replaceTo="" regexOpts="g"}}` 等，
+  字段取自条目完整元数据（publisher / edition / number / versionNumber…）。
+  重名时自动追加 ` -- <item_key>` 消歧。
+
+改了模板后执行 `zsb refresh-mirrors`（或桌面端状态页的「刷新快捷方式」）
+全量对齐：变化的改名、缺失的补写。
 
 ## macOS + Alfred / Raycast
 

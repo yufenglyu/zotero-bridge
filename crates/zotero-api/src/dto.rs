@@ -72,6 +72,11 @@ pub struct ItemData {
     /// Present (and truthy) when the item is in the trash.
     #[serde(default)]
     pub deleted: serde_json::Value,
+    /// Every other Zotero field (edition, number, versionNumber, volume,
+    /// pages, DOI, ...) preserved verbatim so `raw_json` keeps the complete
+    /// record and the filename templater can read any field.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, serde_json::Value>,
 }
 
 impl ItemData {

@@ -426,8 +426,26 @@ button.danger:hover:not(:disabled) {
   font-size: 13px;
 }
 
+.field textarea {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: Consolas, "Courier New", monospace;
+  line-height: 1.5;
+  resize: vertical;
+  user-select: text;
+}
+
+.field.field-top { align-items: flex-start; }
+.field.field-top > span { padding-top: 8px; }
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: none;
   border-color: var(--accent);
 }

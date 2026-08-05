@@ -22,12 +22,24 @@ Zotero Search Bridge 便携版（免安装）
      zsb.exe open --library user --key N49R8KAQ
      zsb.exe status                 查看索引状态
 
-Listary 集成
-------------
-托盘程序“设置”页可查看镜像目录；把它加入 Listary 索引，即可按
-作者/年份/标题 搜索并双击定位。默认镜像目录：
+快捷方式（Listary 集成）
+------------------------
+托盘程序为每条文献生成 .url 快捷方式，双击即用 zotero:// 定位到
+Zotero 条目。把快捷方式目录加入 Listary 索引，即可按 作者/年份/标题
+搜索并双击定位。默认目录：
   %LOCALAPPDATA%\ZoteroSearchBridge\mirrors\windows\
 也可在设置页改到你已有的 Listary 索引目录。
+
+文件名模板支持两套语法（设置页修改，模板含 {{ 即按 Zotero 语法解析）：
+- 简洁语法：{primary_creator} - {year} - {title} -- {item_key}
+- Zotero 模板语法（与 Zotero 附件重命名一致）：
+  {{if itemType == "journalArticle"}}...{{elseif}}...{{else}}...{{endif}}
+  {{authors max="1" initialize="given"}}
+  {{date replaceFrom="[^0-9].*" replaceTo="" regexOpts="g"}}
+
+修改模板或快捷方式目录与索引不一致时，执行全量刷新：
+  zsb.exe refresh-mirrors
+（改名变化的文件、补写缺失的文件；托盘程序状态页也有“刷新快捷方式”按钮。）
 
 数据位置（便携模式）
 --------------------

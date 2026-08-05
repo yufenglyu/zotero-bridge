@@ -81,6 +81,9 @@ enum Commands {
     VerifyIndex,
     /// Delete mirror files that no longer match any indexed item.
     CleanMirrors,
+    /// Re-render all shortcut filenames with the current template and sync
+    /// the shortcut directory (rename changed, rewrite missing).
+    RefreshMirrors,
 }
 
 #[tokio::main]
@@ -190,6 +193,24 @@ async fn run(cli: Cli) -> Result<()> {
         Commands::CleanMirrors => {
             let db = Database::open(&db_path)?;
             clean_mirrors(&db, &config)?;
+        }
+        Commands::RefreshMirrors => {
+            let mut db = Database::open(&db_path)?;
+            let report = zsb_sync::refresh_mirrors(&mut db, &config)?;
+            for platform in zsb_sync::enabled_platforms(&config) {
+                let w = zsb_mirror::worker::process_pending(&db, platform, 10000)?;
+                println!(
+                    "快捷方式 [{}]: 完成 {}, 重试 {}, 失败 {}",
+                    platform.as_str(),
+                    w.completed,
+                    w.retried,
+                    w.failed
+                );
+            }
+            println!(
+                "刷新完成：改名 {}，补写 {}，无需变动 {}",
+                report.renamed, report.rewritten, report.unchanged
+            );
         }
     }
     Ok(())
