@@ -261,7 +261,17 @@ onUnmounted(() => {
 
       <div class="panel">
         <h3>同步控制</h3>
-        <div class="row"><span>当前实例</span><b>{{ status.instance || "未知" }}</b></div>
+        <div class="row">
+          <span>
+            当前实例
+            <i
+              class="help"
+              title="当前索引绑定的 Zotero 程序标识（Server ID）。换电脑、重装 Zotero 或切换 profile 后该标识会变化，程序会自动检测到实例变更并重新全量同步，避免不同 Zotero 的数据混在一起。"
+              >?</i
+            >
+          </span>
+          <b>{{ status.instance || "未知" }}</b>
+        </div>
         <div class="row"><span>最近同步</span><b>{{ fmtTime(status.last_sync_at) }}</b></div>
         <div class="panel-actions">
           <button class="primary" :disabled="busy" @click="syncNow">立即同步</button>

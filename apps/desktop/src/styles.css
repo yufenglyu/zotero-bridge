@@ -281,6 +281,24 @@ h1 {
 
 .row span { color: var(--text-dim); }
 
+.help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 5px;
+  border: 1px solid var(--text-dim);
+  border-radius: 50%;
+  font-size: 10px;
+  font-style: normal;
+  cursor: help;
+  opacity: 0.75;
+  vertical-align: 1px;
+}
+
+.help:hover { opacity: 1; border-color: var(--accent); color: var(--accent); }
+
 .panel-actions {
   display: flex;
   gap: 10px;
