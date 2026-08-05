@@ -60,7 +60,6 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
   dist-portable 曾被一次误操作从工作区删除，用 `git checkout -- dist-portable` 恢复。
 
 ### 桌面端修复与 UI 重构（2026-08-05）
-
 - **常驻命令行窗口**：main.rs 缺 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`，
   release exe 是 console 子系统 → 已修复，新 exe PE subsystem = 2 (GUI)。
 - **主题**：CSS 变量双主题（VS Code Light+/Dark+ 近似配色），
@@ -72,6 +71,24 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
   （设置 tab 上的橙点）；诊断页加说明文字。
 - 设置页补齐了此前未暴露的字段：log_level、api_base、request_timeout、
   maximum_limit、index_extra、short_query_fallback。
+
+### /deleted 404 导致同步全挂（2026-08-05 傍晚修复）
+
+- 现象：状态页文献库报错 `zotero API error: status 404 No endpoint found`，
+  版本停在 0。
+- 根因：同一台 Zotero 10.0-beta.22 现在 `format=versions` 返回真实版本
+  （Last-Modified-Version: 30，早前为空 → 走 FullScan 回退不碰 /deleted），
+  引擎改走 Stable 路径后调用 `/users/0/deleted`，而该 beta 的 Local API
+  **不暴露 /deleted**（404），错误经 `?` 传播使整个同步轮失败。
+- 修复：`LocalApiClient::deleted_objects` 对 404 特判——视为端点不支持，
+  记 `tracing::warn` 并返回空集合（last_modified_version=0，引擎比较时
+  已会忽略 0）；删除检测由 FullScan 的 key 差集路径兜底。
+- 测试：client.rs 新增 2 项（404 容忍 / 500 仍报错，内嵌 TcpListener
+  stub server），workspace 64 项全绿；真实 Zotero 端到端 `zsb sync` 通过
+  （+4797 条，版本 0→30，仅一条 /deleted WARN）。
+- **重要**：用户实际运行的便携版在 `target\dist\zsb-portable\`（自行解压，
+  data\ 在里面），修复后的 exe 已原地替换该目录下的两个 exe（2026-08-05
+  17:21），用户重启程序即可，其 zsb-config.toml（有自定义）未动。
 
 ### 自定义路径（配置与索引，2026-08-04 晚）
 

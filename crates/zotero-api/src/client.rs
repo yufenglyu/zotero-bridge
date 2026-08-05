@@ -194,11 +194,76 @@ impl ZoteroSource for LocalApiClient {
 
     async fn deleted_objects(&self, library: &RemoteLibrary, since: u64) -> Result<DeletedObjects> {
         let url = self.url(&format!("{}/deleted", library.api_prefix));
-        let (deleted, lm): (DeletedResponse, u64) =
-            self.get_json(&url, &[("since", since.to_string())]).await?;
+        // Some Zotero builds (e.g. 10.0 betas) do not expose /deleted via the
+        // local API and answer 404 "No endpoint found". Treat that as
+        // "endpoint unsupported" and return an empty set instead of failing
+        // the whole sync round; deletions are then picked up by the
+        // full-scan key-diff path or the next instance change.
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[("since", since.to_string())])
+            .send()
+            .await
+            .map_err(Self::map_reqwest_err)?;
+        if resp.status().as_u16() == 404 {
+            tracing::warn!("{}: /deleted unsupported (404); skipping deletion sync", url);
+            return Ok(DeletedObjects::default());
+        }
+        let lm = Self::header_u64(&resp, "last-modified-version").unwrap_or(0);
+        let resp = Self::checked(resp).await?;
+        let body = resp.text().await.map_err(Self::map_reqwest_err)?;
+        let deleted: DeletedResponse = serde_json::from_str(&body).map_err(|e| {
+            Error::Json(format!("{e}; body starts: {}", &body[..body.len().min(120)]))
+        })?;
         Ok(DeletedObjects {
             deleted,
             last_modified_version: lm,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Serve a single fixed HTTP response on a loopback port; returns the
+    /// api_base URL pointing at it.
+    fn serve_once(response: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        format!("http://{addr}/api")
+    }
+
+    #[tokio::test]
+    async fn deleted_404_means_unsupported_not_failure() {
+        let base = serve_once(
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 16\r\nConnection: close\r\n\r\nNo endpoint found",
+        );
+        let client = LocalApiClient::new(&base, 5).unwrap();
+        let lib = RemoteLibrary::user();
+        let d = client.deleted_objects(&lib, 0).await.unwrap();
+        assert!(d.deleted.items.is_empty());
+        assert_eq!(d.last_modified_version, 0);
+    }
+
+    #[tokio::test]
+    async fn deleted_500_still_fails() {
+        let base = serve_once(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 5\r\nConnection: close\r\n\r\nboom!",
+        );
+        let client = LocalApiClient::new(&base, 5).unwrap();
+        let lib = RemoteLibrary::user();
+        let err = client.deleted_objects(&lib, 0).await.unwrap_err();
+        assert!(matches!(err, Error::Api { status: 500, .. }));
     }
 }
