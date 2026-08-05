@@ -118,6 +118,24 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
   需全量重同步（或 rebuild）后 Zotero 模板才能取到这些字段；此间模板渲染
   优雅回退为空串。
 
+### 模板跟随 Zotero + 4 字改名（2026-08-05 深夜）
+
+- **`zsb_core::zotero_prefs`**：从 Zotero profile 读命名模板。定位
+  `%APPDATA%\Zotero\Zotero\profiles.ini` → Default profile → prefs.js →
+  `user_pref("extensions.zotero.attachmentRenameTemplate", ...)`（JS 转义
+  \" \\ \n 还原）。macOS 路径 `~/Library/Application Support/Zotero/`。
+- **resolve_template 优先级**：自定义模板（非空且 ≠ 旧默认串）>
+  Zotero pref > 内置默认。**配置留空或仍是旧默认串 = 跟随 Zotero**
+  （新装默认即跟随；老配置里存的旧默认串自动视为跟随）。
+- 设置页改为「跟随 Zotero 命名模板」复选（默认勾选，展示 Zotero 模板
+  只读预览，新 Tauri 命令 `zotero_template`）；取消勾选才出现自定义
+  textarea。
+- 界面改名：快捷方式目录→**快捷目录**、刷新快捷方式→**刷新链接**、
+  待写入快捷方式→**待写入链接**、面板→**链接定位（Listary / Alfred）**。
+- 坑：引擎测试原来用内置默认模板，跟随功能后测试会读到开发机真实
+  Zotero pref → 环境依赖。解法：测试固定使用「渲染结果相同但字符串不同」
+  的自定义模板（`{title}{container_title}` 空占位符技巧）。
+
 ### 自定义路径（配置与索引，2026-08-04 晚）
 
 - `zsb_core::paths` 新增解析 API：`resolve_config_file` /

@@ -443,6 +443,25 @@ button.danger:hover:not(:disabled) {
 .field.field-top { align-items: flex-start; }
 .field.field-top > span { padding-top: 8px; }
 
+.tpl-preview {
+  margin: 6px 0 4px;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px dashed var(--panel-border);
+  border-radius: 6px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-dim);
+  max-height: 160px;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.tpl-missing { font-family: inherit; }
+
 .field input:focus,
 .field select:focus,
 .field textarea:focus {

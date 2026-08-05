@@ -200,7 +200,7 @@ async fn run(cli: Cli) -> Result<()> {
             for platform in zsb_sync::enabled_platforms(&config) {
                 let w = zsb_mirror::worker::process_pending(&db, platform, 10000)?;
                 println!(
-                    "快捷方式 [{}]: 完成 {}, 重试 {}, 失败 {}",
+                    "链接 [{}]: 完成 {}, 重试 {}, 失败 {}",
                     platform.as_str(),
                     w.completed,
                     w.retried,

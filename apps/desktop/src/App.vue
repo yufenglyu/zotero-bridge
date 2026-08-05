@@ -77,6 +77,29 @@ const dirty = computed(
   () => config.value !== null && JSON.stringify(config.value) !== savedSnapshot.value
 );
 
+// 文件名模板：默认跟随 Zotero 自己的附件命名模板（prefs.js），
+// 用户也可切换为自定义。空串 / 旧默认串都视为“跟随”。
+const LEGACY_DEFAULT_TEMPLATE = "{primary_creator} - {year} - {title} -- {item_key}";
+const followZotero = ref(true);
+const customBackup = ref("");
+const zoteroTpl = ref<string | null>(null);
+
+function syncFollowState() {
+  const tpl = config.value?.mirror.windows.template ?? "";
+  followZotero.value = tpl.trim() === "" || tpl.trim() === LEGACY_DEFAULT_TEMPLATE;
+}
+
+watch(followZotero, (follow) => {
+  if (!config.value) return;
+  const cur = config.value.mirror.windows.template;
+  if (follow) {
+    if (cur.trim() !== "" && cur.trim() !== LEGACY_DEFAULT_TEMPLATE) customBackup.value = cur;
+    config.value.mirror.windows.template = "";
+  } else {
+    config.value.mirror.windows.template = customBackup.value || LEGACY_DEFAULT_TEMPLATE;
+  }
+});
+
 let timer: number | undefined;
 let themeTimer: number | undefined;
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -146,7 +169,9 @@ async function loadConfig() {
   if (c) {
     config.value = c;
     savedSnapshot.value = JSON.stringify(c);
+    syncFollowState();
   }
+  zoteroTpl.value = await safeInvoke<string | null>("zotero_template");
 }
 
 async function saveConfig() {
@@ -270,15 +295,15 @@ onUnmounted(() => {
         <div class="card">
           <div class="card-value">{{ status.pending_jobs }}</div>
           <div class="card-label">
-            待写入快捷方式
-            <i class="help" title="等待写入快捷方式目录的 .url 文件数量。同步后自动生成，正常情况下会很快清零；程序崩溃未完成的任务会在下次启动时继续。">?</i>
+            待写入链接
+            <i class="help" title="等待写入快捷目录的 .url 文件数量。同步后自动生成，正常情况下会很快清零；程序崩溃未完成的任务会在下次启动时继续。">?</i>
           </div>
         </div>
         <div class="card" :class="{ warn: status.failed_jobs > 0 }">
           <div class="card-value">{{ status.failed_jobs }}</div>
           <div class="card-label">
             失败任务
-            <i class="help" title="多次重试仍失败的快捷方式写入任务。可在诊断页排查目录可写性，或使用“重建索引”。">?</i>
+            <i class="help" title="多次重试仍失败的链接写入任务。可在诊断页排查目录可写性，或使用“重建索引”。">?</i>
           </div>
         </div>
       </div>
@@ -332,7 +357,7 @@ onUnmounted(() => {
       <div class="panel">
         <h3>目录与日志</h3>
         <div class="link-row" @click="openDir('mirror')">
-          <span>快捷方式目录</span><em>Listary 索引此目录以定位文献</em>
+          <span>快捷目录</span><em>Listary 索引此目录以定位文献</em>
         </div>
         <div class="link-row" @click="openDir('config')">
           <span>配置目录</span><em>config.toml 所在位置</em>
@@ -343,10 +368,10 @@ onUnmounted(() => {
         <div class="panel-actions">
           <button
             :disabled="busy"
-            title="按当前文件名模板重新生成全部快捷方式：名字变化的改名、磁盘上缺失的补写。改了模板后点这里一次到位。"
+            title="按当前命名模板重新生成全部链接文件：名字变化的改名、磁盘上缺失的补写。改了模板后点这里一次到位。"
             @click="refreshLinks"
           >
-            刷新快捷方式
+            刷新链接
           </button>
         </div>
       </div>
@@ -456,22 +481,36 @@ onUnmounted(() => {
 
       <div class="panel">
         <h3>
-          快捷方式（外部工具定位）
-          <i class="help" title="为每条文献在指定目录生成一个快捷方式文件（Windows 为 .url，macOS 为 .webloc），双击即用 zotero:// 协议定位到 Zotero 中的条目。把快捷方式目录加入 Listary / Alfred 等启动器索引，就能按作者、年份、标题搜索并跳转。">?</i>
+          链接定位（Listary / Alfred）
+          <i class="help" title="为每条文献在快捷目录生成一个链接文件（Windows 为 .url，macOS 为 .webloc），双击即用 zotero:// 协议定位到 Zotero 中的条目。把快捷目录加入 Listary / Alfred 等启动器索引，就能按作者、年份、标题搜索并跳转。">?</i>
         </h3>
         <h4>Windows · .url（Listary）</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.windows.enabled" />
-          <span>启用 .url 快捷方式</span>
+          <span>启用 .url 链接</span>
         </label>
         <label class="field">
-          <span>快捷方式目录</span>
+          <span>快捷目录</span>
           <input type="text" v-model="config.mirror.windows.directory" />
         </label>
-        <label class="field field-top">
+        <label class="field checkbox">
+          <input type="checkbox" v-model="followZotero" />
           <span>
-            文件名模板
-            <i class="help" title="支持两套语法：&#10;1. 简洁语法：{primary_creator}（第一作者）、{year}（年份）、{title}（标题）、{item_key}（条目键，自动附加保证不重名）。&#10;2. Zotero 模板语法（{{...}}，与 Zotero 附件重命名一致）：{{if itemType == &quot;journalArticle&quot;}}...{{endif}}、{{authors max=&quot;1&quot;}}、{{date replaceFrom=... replaceTo=...}} 等。模板含 {{ 即按 Zotero 语法解析。&#10;修改后保存，再到状态页点“刷新快捷方式”应用到全部条目。">?</i>
+            跟随 Zotero 命名模板
+            <i class="help" title="直接使用 Zotero「设置 → 高级 → 文件名模板」里的附件重命名模板（prefs.js 的 attachmentRenameTemplate），改 Zotero 侧即可，无需在这里配置。取消勾选可自定义模板。">?</i>
+          </span>
+        </label>
+        <div v-if="followZotero" class="tpl-preview">
+          <template v-if="zoteroTpl">{{ zoteroTpl }}</template>
+          <span v-else class="tpl-missing">
+            未读取到 Zotero 的模板（Zotero 未安装或未设置），将使用内置默认：
+            {primary_creator} - {year} - {title} -- {item_key}
+          </span>
+        </div>
+        <label v-else class="field field-top">
+          <span>
+            自定义模板
+            <i class="help" title="支持两套语法：&#10;1. 简洁语法：{primary_creator}（第一作者）、{year}（年份）、{title}（标题）、{item_key}（条目键，自动附加保证不重名）。&#10;2. Zotero 模板语法（{{...}}，与 Zotero 附件重命名一致）：{{if itemType == &quot;journalArticle&quot;}}...{{endif}}、{{authors max=&quot;1&quot;}}、{{date replaceFrom=... replaceTo=...}} 等。模板含 {{ 即按 Zotero 语法解析。&#10;修改后保存，再到状态页点“刷新链接”应用到全部条目。">?</i>
           </span>
           <textarea
             rows="5"
@@ -483,10 +522,10 @@ onUnmounted(() => {
         <h4>macOS · .webloc</h4>
         <label class="field checkbox">
           <input type="checkbox" v-model="config.mirror.macos.enabled" />
-          <span>启用 .webloc 快捷方式</span>
+          <span>启用 .webloc 链接</span>
         </label>
         <label class="field">
-          <span>快捷方式目录</span>
+          <span>快捷目录</span>
           <input type="text" v-model="config.mirror.macos.directory" />
         </label>
       </div>

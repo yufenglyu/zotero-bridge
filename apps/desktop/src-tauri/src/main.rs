@@ -211,6 +211,11 @@ fn rebuild_index(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn zotero_template() -> Option<String> {
+    zsb_core::zotero_prefs::attachment_rename_template()
+}
+
+#[tauri::command]
 fn refresh_links(state: State<'_, AppState>) -> Result<String, String> {
     let cfg = state.config.read().unwrap().clone();
     let mut db = Database::open(&state.db_path).map_err(|e| e.to_string())?;
@@ -224,7 +229,7 @@ fn refresh_links(state: State<'_, AppState>) -> Result<String, String> {
         failed += w.failed;
     }
     Ok(format!(
-        "快捷方式已刷新：改名 {}，补写 {}，无需变动 {}{}",
+        "链接已刷新：改名 {}，补写 {}，无需变动 {}{}",
         report.renamed,
         report.rewritten,
         report.unchanged,
@@ -459,6 +464,7 @@ fn main() {
             save_config,
             rebuild_index,
             refresh_links,
+            zotero_template,
             open_dir,
             doctor,
         ])

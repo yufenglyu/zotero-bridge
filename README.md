@@ -67,7 +67,11 @@ author:Smith turbine   # 字段限定：author / year / tag / type / library
 
 ### 文件名模板
 
-`mirror.windows.template` 支持两套语法（含 `{{` 即按 Zotero 语法解析）：
+**默认直接跟随 Zotero 自己的附件命名模板**（读取 Zotero profile
+prefs.js 的 `extensions.zotero.attachmentRenameTemplate`），在 Zotero
+「设置 → 高级 → 文件名模板」里改即可，无需在本软件中配置。
+也可在设置页取消“跟随 Zotero 命名模板”后自定义（`mirror.windows.template`，
+含 `{{` 即按 Zotero 语法解析）：
 
 - 简洁语法：`{primary_creator} - {year} - {title} -- {item_key}`
 - **Zotero 模板语法**（与 Zotero 附件重命名一致）：
@@ -77,7 +81,7 @@ author:Smith turbine   # 字段限定：author / year / tag / type / library
   字段取自条目完整元数据（publisher / edition / number / versionNumber…）。
   重名时自动追加 ` -- <item_key>` 消歧。
 
-改了模板后执行 `zsb refresh-mirrors`（或桌面端状态页的「刷新快捷方式」）
+改了模板后执行 `zsb refresh-mirrors`（或桌面端状态页的「刷新链接」）
 全量对齐：变化的改名、缺失的补写。
 
 ## macOS + Alfred / Raycast

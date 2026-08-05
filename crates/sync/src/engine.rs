@@ -395,11 +395,14 @@ fn plan_mirror_jobs(
     let platforms = enabled_platforms(config);
 
     // Render the canonical base filename once per item (first enabled
-    // platform's template) and store it on the item.
+    // platform's template) and store it on the item. The effective
+    // template follows Zotero's own attachment rename template unless the
+    // user configured a custom one (zsb_core::zotero_prefs).
     if let Some(first) = platforms.first() {
-        let template = &config.mirror_for(*first).template;
+        let template =
+            zsb_core::zotero_prefs::resolve_template(&config.mirror_for(*first).template);
         for item in upserts.iter_mut() {
-            item.mirror_filename = Some(filename::render_auto(template, item));
+            item.mirror_filename = Some(filename::render_auto(&template, item));
         }
 
         // Collision fallback: Zotero-style templates carry no item key, so
@@ -429,14 +432,15 @@ fn plan_mirror_jobs(
 
     for platform in platforms {
         let backend = backend_for(platform);
-        let template = &config.mirror_for(platform).template;
+        let template =
+            zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platform).template);
         let dir = config.mirror_dir(platform);
 
         for item in upserts.iter() {
             let base = item
                 .mirror_filename
                 .clone()
-                .unwrap_or_else(|| filename::render_auto(template, item));
+                .unwrap_or_else(|| filename::render_auto(&template, item));
             let new_path = dir
                 .join(format!("{base}.{}", backend.extension()))
                 .to_string_lossy()
@@ -506,7 +510,8 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
     if platforms.is_empty() {
         return Ok(MirrorRefreshReport::default());
     }
-    let template = config.mirror_for(platforms[0]).template.clone();
+    let template =
+        zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platforms[0]).template);
     let mut report = MirrorRefreshReport::default();
 
     for lib in db.list_libraries(None)? {
@@ -609,10 +614,18 @@ mod tests {
     use super::*;
     use zsb_core::LibraryKind;
 
+    /// Custom template for tests: renders identically to the built-in
+    /// default but differs as a string, so template resolution treats it
+    /// as custom and never reads the developer machine's real Zotero pref
+    /// (which would make these tests environment-dependent).
+    const TEST_TEMPLATE: &str =
+        "{primary_creator} - {year} - {title}{container_title} -- {item_key}";
+
     fn test_config() -> Config {
         let mut cfg = Config::default();
         cfg.mirror.windows.enabled = true;
         cfg.mirror.windows.directory = "/tmp/zsb-test-mirrors".into();
+        cfg.mirror.windows.template = TEST_TEMPLATE.into();
         cfg.mirror.macos.enabled = false;
         cfg
     }
