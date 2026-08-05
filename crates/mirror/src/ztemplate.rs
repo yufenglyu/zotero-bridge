@@ -401,11 +401,27 @@ fn data_str(ctx: &Ctx, keys: &[&str]) -> Option<String> {
     None
 }
 
-/// Format creators of one type. Two-field names render as
-/// "Given Family" (or "G. Family" with initialize="given"); single-field
-/// (institutional) names render verbatim. Joined with ", ".
+/// Format creators of one type, following Zotero 7's documented semantics
+/// (https://www.zotero.org/support/file_renaming):
+///
+/// - `name` (default "family"): which name parts to include —
+///   "family" (surname only), "given", "family-given", "given-family".
+/// - `initialize` ("given" | "family" | "full"): convert the matching
+///   *included* part(s) to initials. With the default name="family",
+///   initialize="given" has no effect because the given part is excluded —
+///   so `{{authors max="1" initialize="given"}}` yields just the surname.
+/// - `initialize-with` (default "."): appended to each initial.
+/// - `name-part-separator` (default " "): joins family/given parts.
+/// - `join` (default ", "): joins consecutive creators.
+/// - `max`: limit number of creators used.
+///
+/// Single-field (institutional) names always render verbatim.
 fn format_creators(ctx: &Ctx, creator_type: &str, attrs: &[(String, String)]) -> String {
-    let initialize = attr(attrs, "initialize") == Some("given");
+    let name_fmt = attr(attrs, "name").unwrap_or("family");
+    let initialize = attr(attrs, "initialize");
+    let init_with = attr(attrs, "initialize-with").unwrap_or(".");
+    let part_sep = attr(attrs, "name-part-separator").unwrap_or(" ");
+    let join = attr(attrs, "join").unwrap_or(", ");
     let max: Option<usize> = attr(attrs, "max").and_then(|m| m.parse().ok());
 
     let mut names: Vec<String> = Vec::new();
@@ -419,18 +435,21 @@ fn format_creators(ctx: &Ctx, creator_type: &str, attrs: &[(String, String)]) ->
             let first = c.get("firstName").and_then(|v| v.as_str()).unwrap_or("");
             let name = if !single.trim().is_empty() {
                 single.trim().to_string()
-            } else if initialize && !first.trim().is_empty() {
-                let initials: Vec<String> = first
-                    .split_whitespace()
-                    .filter_map(|w| w.chars().next().map(|c| format!("{c}.")))
-                    .collect();
-                format!("{} {}", initials.join(" "), last.trim())
-                    .trim()
-                    .to_string()
             } else {
-                format!("{} {}", first.trim(), last.trim())
-                    .trim()
-                    .to_string()
+                let family = maybe_initialize(last.trim(), "family", initialize, init_with);
+                let given = maybe_initialize(first.trim(), "given", initialize, init_with);
+                let parts: Vec<&str> = match name_fmt {
+                    "given" => vec![given.as_str()],
+                    "family-given" => vec![family.as_str(), given.as_str()],
+                    "given-family" => vec![given.as_str(), family.as_str()],
+                    // "family" and any unknown value: surname only.
+                    _ => vec![family.as_str()],
+                };
+                parts
+                    .into_iter()
+                    .filter(|p| !p.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(part_sep)
             };
             if !name.is_empty() {
                 names.push(name);
@@ -446,7 +465,26 @@ fn format_creators(ctx: &Ctx, creator_type: &str, attrs: &[(String, String)]) ->
     if let Some(m) = max {
         names.truncate(m);
     }
-    names.join(", ")
+    names.join(join)
+}
+
+/// Convert a name part to initials when `initialize` targets it
+/// ("full" targets both parts). Each whitespace-separated word contributes
+/// its first character plus `init_with`.
+fn maybe_initialize(
+    part: &str,
+    part_kind: &str,
+    initialize: Option<&str>,
+    init_with: &str,
+) -> String {
+    let targeted = matches!(initialize, Some("full")) || initialize == Some(part_kind);
+    if !targeted || part.is_empty() {
+        return part.to_string();
+    }
+    part.split_whitespace()
+        .filter_map(|w| w.chars().next().map(|c| format!("{c}{init_with}")))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]
@@ -498,10 +536,51 @@ mod tests {
     #[test]
     fn authors_max_and_initialize() {
         let i = item_with_raw(RAW_ARTICLE, "K1");
+        // Default name="family" excludes the given part entirely, so
+        // initialize="given" has no effect: surname only (Zotero behavior).
         assert_eq!(
             render("{{authors max=\"1\" initialize=\"given\"}}", &i),
+            "Wang"
+        );
+    }
+
+    #[test]
+    fn authors_name_and_initialize_variants() {
+        let i = item_with_raw(RAW_ARTICLE, "K1");
+        assert_eq!(
+            render("{{authors name=\"given-family\" initialize=\"given\"}}", &i),
             "W. Wang"
         );
+        assert_eq!(render("{{authors name=\"family-given\"}}", &i), "Wang Wei");
+        assert_eq!(
+            render(
+                "{{authors name=\"given-family\" initialize=\"full\" initialize-with=\"\" name-part-separator=\"\"}}",
+                &i
+            ),
+            "WW"
+        );
+    }
+
+    #[test]
+    fn authors_single_field_verbatim() {
+        let i = item_with_raw(
+            r#"{"key":"K6","version":1,"data":{"itemType":"book","title":"T","creators":[{"creatorType":"author","name":"张三"}]}}"#,
+            "K6",
+        );
+        assert_eq!(
+            render("{{authors max=\"1\" initialize=\"given\"}}", &i),
+            "张三"
+        );
+    }
+
+    #[test]
+    fn authors_join_attr() {
+        let i = item_with_raw(
+            r#"{"key":"K7","version":1,"data":{"itemType":"journalArticle","title":"T","creators":[{"creatorType":"author","firstName":"Wei","lastName":"Wang"},{"creatorType":"author","firstName":"San","lastName":"Zhang"}]}}"#,
+            "K7",
+        );
+        assert_eq!(render("{{authors}}", &i), "Wang, Zhang");
+        assert_eq!(render("{{authors join=\" & \"}}", &i), "Wang & Zhang");
     }
 
     #[test]
@@ -552,6 +631,6 @@ mod tests {
     fn user_template_smoke() {
         let t = "{{if itemType == \"journalArticle\"}}\n【{{authors max=\"1\" initialize=\"given\"}}{{if date}}-{{date replaceFrom=\"[^0-9].*\" replaceTo=\"\" regexOpts=\"g\"}}{{endif}}】{{title}}\n{{else}}\nother\n{{endif}}";
         let i = item_with_raw(RAW_ARTICLE, "K1");
-        assert_eq!(render(t, &i), "【W. Wang-2024】燃气轮机: 转子/动力学?");
+        assert_eq!(render(t, &i), "【Wang-2024】燃气轮机: 转子/动力学?");
     }
 }

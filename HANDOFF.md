@@ -209,6 +209,14 @@ Zotero Local API + Tauri），并已完成 M0–M5 全部里程碑、Windows 安
    层处理，勿回归）。
 10. **打包时 WebView2 引导器下载偶发 TLS 中断**：`npx tauri build`
     重试即可（已遇到一次，第二次成功）。
+11. **Zotero 模板 `authors` 的 `name` 参数默认是 `family`（只取姓）**：
+    `{{authors max="1" initialize="given"}}` 在两段式创作者上只输出姓，
+    `initialize="given"` 因 given 部分未被包含而无效；单字段（合并）
+    创作者整体视为姓原样输出。曾错误实现为「名取首字母+姓」
+    （`W. Wang`），已按官方文档
+    （zotero.org/support/file_renaming）重写 `format_creators`，
+    补全 `name`/`initialize`/`initialize-with`/`name-part-separator`/
+    `join` 参数（2026-08-05）。
 
 ## 关键路径速查
 
