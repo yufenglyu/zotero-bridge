@@ -113,6 +113,10 @@ jobs:
           cargo build --release -p zotero-bridge --target aarch64-apple-darwin
           cargo build --release -p zotero-bridge --target x86_64-apple-darwin
 
+      - name: Build frontend
+        working-directory: apps/desktop
+        run: npm run build
+
       - name: Build macOS app
         working-directory: apps/desktop
         env:
