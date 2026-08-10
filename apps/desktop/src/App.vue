@@ -1,6 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  Activity,
+  BookOpen,
+  Database,
+  FileText,
+  FolderOpen,
+  HardDrive,
+  HelpCircle,
+  Link,
+  Monitor,
+  Moon,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Search,
+  Settings,
+  Stethoscope,
+  Sun,
+  Terminal,
+} from "@lucide/vue";
 
 interface LibraryView {
   kind: string;
@@ -21,6 +43,21 @@ interface StatusView {
   paused: boolean;
   zotero_running: boolean;
   libraries: LibraryView[];
+  mirror_directories: MirrorDirectoryView[];
+}
+
+interface MirrorDirectoryView {
+  platform: string;
+  enabled: boolean;
+  directory: string;
+  extension: string;
+  expected_files: number;
+  actual_files: number;
+  missing_files: number;
+  orphan_files: number;
+  stale_files: number;
+  latest_created_at: string | null;
+  latest_modified_at: string | null;
 }
 
 interface Config {
@@ -40,8 +77,8 @@ interface Config {
     short_query_fallback: boolean;
   };
   mirror: {
-    windows: { enabled: boolean; directory: string; template: string };
-    macos: { enabled: boolean; directory: string; template: string };
+    windows: { enabled: boolean; directory: string; template: string; uri_template: string };
+    macos: { enabled: boolean; directory: string; template: string; uri_template: string };
   };
   maintenance: { optimize_after_updates: number; retain_logs_days: number };
   storage: { database: string };
@@ -49,8 +86,10 @@ interface Config {
 
 type ThemeMode = "light" | "dark" | "system";
 
-const THEME_KEY = "zsb-theme-mode";
-const themeMode = ref<ThemeMode>((localStorage.getItem(THEME_KEY) as ThemeMode) || "system");
+const THEME_KEY = "zotero-bridge-theme-mode";
+const LEGACY_THEME_KEY = "zsb-theme-mode";
+const storedTheme = localStorage.getItem(THEME_KEY) || localStorage.getItem(LEGACY_THEME_KEY);
+const themeMode = ref<ThemeMode>((storedTheme as ThemeMode) || "system");
 const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
 
 function applyTheme() {
@@ -77,8 +116,6 @@ const dirty = computed(
   () => config.value !== null && JSON.stringify(config.value) !== savedSnapshot.value
 );
 
-// 文件名模板：默认跟随 Zotero 自己的附件命名模板（prefs.js），
-// 用户也可切换为自定义。空串 / 旧默认串都视为“跟随”。
 const LEGACY_DEFAULT_TEMPLATE = "{primary_creator} - {year} - {title} -- {item_key}";
 const followZotero = ref(true);
 const customBackup = ref("");
@@ -104,6 +141,44 @@ let timer: number | undefined;
 let themeTimer: number | undefined;
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 const onSystemTheme = (e: MediaQueryListEvent) => (systemDark.value = e.matches);
+
+const connectionLabel = computed(() => {
+  if (!status.value) return "读取中";
+  if (status.value.paused) return "同步已暂停";
+  if (status.value.zotero_running) return "Zotero 已连接";
+  return "等待 Zotero";
+});
+
+const connectionTone = computed(() => {
+  if (!status.value) return "neutral";
+  if (status.value.paused) return "warn";
+  if (status.value.zotero_running) return "ok";
+  return "off";
+});
+
+const searchableNote = computed(() => {
+  const count = status.value?.item_count ?? 0;
+  return `${count.toLocaleString()} 条可搜索文献；顶层附件、笔记、批注按规格不进入索引。`;
+});
+
+const themeLabel = computed(() => {
+  if (themeMode.value === "light") return "浅色";
+  if (themeMode.value === "dark") return "深色";
+  return "系统";
+});
+
+const footerMessage = computed(() => {
+  if (!tauriAvailable.value) return "浏览器预览模式：桌面数据不可用";
+  if (message.value) return message.value;
+  if (busy.value) return "正在执行操作";
+  if (doctorLines.value.length > 0) return doctorLines.value[doctorLines.value.length - 1];
+  return status.value?.last_sync_at ? `最近同步 ${fmtTime(status.value.last_sync_at)}` : "就绪";
+});
+
+function cycleTheme() {
+  themeMode.value =
+    themeMode.value === "system" ? "light" : themeMode.value === "light" ? "dark" : "system";
+}
 
 async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -210,7 +285,6 @@ function fmtTime(iso: string | null): string {
 onMounted(async () => {
   applyTheme();
   darkQuery.addEventListener("change", onSystemTheme);
-  // 跟随系统模式下轮询系统主题（部分 Windows 环境 change 事件不可靠）
   themeTimer = window.setInterval(() => {
     if (themeMode.value === "system") systemDark.value = darkQuery.matches;
   }, 1000);
@@ -227,342 +301,319 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app">
-    <header class="topbar">
+  <div class="shell">
+    <aside class="sidebar">
       <div class="brand">
-        <span class="logo">Z</span>
         <div>
-          <h1>Zotero Search Bridge</h1>
-          <p class="subtitle">本地文献检索桥</p>
+          <h1>Zotero Bridge</h1>
+          <p>本地文献检索桥</p>
         </div>
       </div>
-      <div class="topbar-right">
-        <div class="sync-state" v-if="status">
-          <span
-            class="dot"
-            :class="status.paused ? 'dot-paused' : status.zotero_running ? 'dot-ok' : 'dot-off'"
-          ></span>
-          <span v-if="status.paused">已暂停</span>
-          <span v-else-if="status.zotero_running">同步中</span>
-          <span v-else>等待 Zotero</span>
-        </div>
-        <div class="seg seg-sm" role="radiogroup" aria-label="主题">
-          <button :class="{ active: themeMode === 'light' }" @click="themeMode = 'light'">
-            浅色
-          </button>
-          <button :class="{ active: themeMode === 'dark' }" @click="themeMode = 'dark'">
-            深色
-          </button>
-          <button :class="{ active: themeMode === 'system' }" @click="themeMode = 'system'">
-            跟随系统
-          </button>
-        </div>
-      </div>
-    </header>
 
-    <nav class="tabs">
-      <button :class="{ active: tab === 'status' }" @click="tab = 'status'">状态</button>
-      <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">
-        设置<span v-if="dirty" class="dirty-dot" title="有未保存的修改"></span>
+      <nav class="nav">
+        <button :class="{ active: tab === 'status' }" @click="tab = 'status'">
+          <span><Activity class="icon" />状态</span>
+          <em v-if="status">{{ status.item_count.toLocaleString() }}</em>
+        </button>
+        <button :class="{ active: tab === 'doctor' }" @click="tab = 'doctor'">
+          <span><Stethoscope class="icon" />诊断</span>
+          <em v-if="status && status.failed_jobs > 0">{{ status.failed_jobs }}</em>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button class="side-tool" :title="`当前主题：${themeLabel}`" @click="cycleTheme">
+          <span>
+            <Sun v-if="themeMode === 'light'" class="icon" />
+            <Moon v-else-if="themeMode === 'dark'" class="icon" />
+            <Monitor v-else class="icon" />
+            {{ themeLabel }}
+          </span>
+        </button>
+        <button class="side-tool" :class="{ active: tab === 'settings' }" @click="tab = 'settings'">
+          <span><Settings class="icon" />设置</span>
+          <i v-if="dirty" title="有未保存的修改"></i>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section v-if="tab === 'status' && status" class="page">
+        <div class="hero">
+          <div>
+            <span class="eyebrow">Library Console</span>
+            <h2>文献索引与链接定位</h2>
+            <p>{{ searchableNote }}</p>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric">
+            <span>已索引条目</span>
+            <strong>{{ status.item_count.toLocaleString() }}</strong>
+            <small>排除附件、笔记、批注</small>
+          </article>
+          <article class="metric">
+            <span>文献库</span>
+            <strong>{{ status.library_count }}</strong>
+            <small>个人库 + 群组库</small>
+          </article>
+          <article class="metric">
+            <span>待写入链接</span>
+            <strong>{{ status.pending_jobs }}</strong>
+            <small>快捷目录任务队列</small>
+          </article>
+          <article class="metric" :class="{ danger: status.failed_jobs > 0 }">
+            <span>失败任务</span>
+            <strong>{{ status.failed_jobs }}</strong>
+            <small>多次重试仍失败</small>
+          </article>
+        </div>
+
+        <div class="content-grid">
+          <section class="panel span-12">
+            <div class="panel-head">
+              <div>
+                <h3>文献库</h3>
+                <p>每个 Zotero 库独立记录版本和启用状态。</p>
+              </div>
+            </div>
+            <div class="library-table">
+              <div
+                v-for="lib in status.libraries"
+                :key="lib.kind + lib.zotero_library_id"
+                class="library-row"
+              >
+                <span class="tag">{{ lib.kind }}</span>
+                <strong>{{ lib.display_name }}</strong>
+                <em>id={{ lib.zotero_library_id }}</em>
+                <em>版本 {{ lib.last_version }}</em>
+                <span class="state" :class="{ off: !lib.enabled }">
+                  {{ lib.enabled ? "启用" : "停用" }}
+                </span>
+                <p v-if="lib.last_error">{{ lib.last_error }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel span-12">
+            <div class="panel-head">
+              <div>
+                <h3>链接文件目录</h3>
+                <p>按当前索引、命名模板和 URI 模板检查本地链接文件是否一致。</p>
+              </div>
+            </div>
+            <div class="mirror-table">
+              <div
+                v-for="dir in status.mirror_directories"
+                :key="dir.platform"
+                class="mirror-row"
+                :class="{ disabled: !dir.enabled, stale: dir.missing_files + dir.orphan_files + dir.stale_files > 0 }"
+              >
+                <div class="mirror-main">
+                  <strong>{{ dir.platform === "windows" ? "Windows" : "macOS" }}</strong>
+                  <span>{{ dir.directory }}</span>
+                </div>
+                <div class="mirror-stats">
+                  <span>文件 {{ dir.actual_files.toLocaleString() }} / {{ dir.expected_files.toLocaleString() }}</span>
+                  <span>缺失 {{ dir.missing_files }}</span>
+                  <span>孤儿 {{ dir.orphan_files }}</span>
+                  <span>过期 {{ dir.stale_files }}</span>
+                </div>
+                <div class="mirror-time">
+                  <span>创建 {{ fmtTime(dir.latest_created_at) }}</span>
+                  <span>更新 {{ fmtTime(dir.latest_modified_at) }}</span>
+                </div>
+                <em>{{ dir.enabled ? "." + dir.extension : "未启用" }}</em>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel span-7">
+            <div class="panel-head">
+              <div>
+                <h3>同步状态</h3>
+                <p>绑定 Zotero 实例并持续刷新本地索引。</p>
+              </div>
+            </div>
+            <dl class="facts">
+              <div>
+                <dt>当前实例</dt>
+                <dd>{{ status.instance || "未知" }}</dd>
+              </div>
+              <div>
+                <dt>最近同步</dt>
+                <dd>{{ fmtTime(status.last_sync_at) }}</dd>
+              </div>
+            </dl>
+            <div class="toolbar">
+              <button
+                class="primary"
+                :disabled="busy"
+                title="立即向 Zotero Local API 拉取变化，更新本地索引，并把本轮变化对应的链接文件写入、改名或删除。"
+                @click="syncNow"
+              >
+                <RefreshCw class="icon" />立即同步
+              </button>
+              <button :disabled="busy" @click="togglePause">
+                <Play v-if="status.paused" class="icon" />
+                <Pause v-else class="icon" />
+                {{ status.paused ? "恢复同步" : "暂停同步" }}
+              </button>
+              <button
+                :disabled="busy"
+                title="不重新拉取 Zotero 数据，只按当前索引、命名模板和 URI 模板重算链接文件；会补写缺失文件、覆盖内容变化的文件、改名已重命名文献对应的文件。"
+                @click="refreshLinks"
+              >
+                <Link class="icon" />刷新链接
+              </button>
+              <button class="danger" :disabled="busy" @click="rebuildIndex">
+                <RotateCcw class="icon" />重建索引
+              </button>
+            </div>
+          </section>
+
+          <section class="panel span-5">
+            <div class="panel-head">
+              <div>
+                <h3>目录</h3>
+                <p>打开常用位置，便于配置 Listary。</p>
+              </div>
+            </div>
+            <div class="action-list">
+              <button @click="openDir('mirror')">
+                <span><FolderOpen class="icon" />链接文件目录</span><em>.url / .webloc</em>
+              </button>
+              <button @click="openDir('config')">
+                <span><FileText class="icon" />配置文件目录</span><em>config.toml</em>
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section v-if="tab === 'settings' && config" class="page">
+        <div class="page-title compact-title">
+          <h2>设置</h2>
+        </div>
+
+        <div class="settings-grid">
+          <section class="panel">
+            <h3><Settings class="icon" />常规</h3>
+            <label class="check"><input type="checkbox" v-model="config.app.start_at_login" />开机自动启动</label>
+            <label class="field">
+              <span class="label-with-help">轮询周期<span class="hint-icon" title="后台自动检查 Zotero 变化的间隔，单位为秒。建议 15-60 秒。"><HelpCircle class="icon" /></span></span>
+              <input type="number" v-model.number="config.app.poll_interval_seconds" min="5" />
+            </label>
+            <label class="field"><span>日志级别</span><select v-model="config.app.log_level"><option value="error">error</option><option value="warn">warn</option><option value="info">info</option><option value="debug">debug</option></select></label>
+          </section>
+
+          <section class="panel">
+            <h3><BookOpen class="icon" />Zotero 连接</h3>
+            <label class="field"><span>Local API</span><input type="text" v-model="config.zotero.api_base" /></label>
+            <label class="field">
+              <span class="label-with-help">请求超时<span class="hint-icon" title="访问 Zotero Local API 的超时时间，单位为秒。"><HelpCircle class="icon" /></span></span>
+              <input type="number" v-model.number="config.zotero.request_timeout_seconds" min="1" />
+            </label>
+            <label class="check"><input type="checkbox" v-model="config.zotero.include_user_library" />索引个人库</label>
+            <label class="field"><span>群组库</span><select v-model="config.zotero.group_mode"><option value="all">全部索引</option><option value="none">不索引</option></select></label>
+          </section>
+
+          <section class="panel">
+            <h3><Search class="icon" />搜索与索引</h3>
+            <label class="field"><span>默认结果数</span><input type="number" v-model.number="config.search.default_limit" min="1" max="100" /></label>
+            <label class="field"><span>结果数上限</span><input type="number" v-model.number="config.search.maximum_limit" min="1" max="500" /></label>
+            <label class="check"><input type="checkbox" v-model="config.search.index_abstract" />索引摘要</label>
+            <label class="check"><input type="checkbox" v-model="config.search.index_extra" />索引 Extra 字段</label>
+            <label class="check"><input type="checkbox" v-model="config.search.short_query_fallback" />短查询回退<span class="hint-icon" title="1-2 个字符的短词改用 LIKE 查询，改善中文短词搜索。"><HelpCircle class="icon" /></span></label>
+            <label class="check"><input type="checkbox" v-model="config.search.store_raw_json" />保存原始 JSON<span class="hint-icon" title="保存 Zotero 返回的完整条目数据，供命名模板读取类型特有字段。"><HelpCircle class="icon" /></span></label>
+          </section>
+
+          <section class="panel">
+            <h3><HardDrive class="icon" />存储</h3>
+            <label class="field">
+              <span class="label-with-help">索引数据库路径<span class="hint-icon" title="留空时使用默认位置；便携模式为 exe 旁的 data\\index.sqlite。修改数据库路径后需要重启。"><HelpCircle class="icon" /></span></span>
+              <input type="text" v-model="config.storage.database" placeholder="留空使用默认位置" />
+            </label>
+          </section>
+
+          <section class="panel wide">
+            <h3><Link class="icon" />链接文件</h3>
+            <div class="settings-section">
+              <h4>目录设置</h4>
+              <div class="split">
+                <div class="platform-box">
+                  <h5>Windows</h5>
+                  <label class="check"><input type="checkbox" v-model="config.mirror.windows.enabled" />启用 .url 链接</label>
+                  <label class="field"><span>链接文件目录</span><input type="text" v-model="config.mirror.windows.directory" /></label>
+                </div>
+                <div class="platform-box">
+                  <h5>macOS</h5>
+                  <label class="check"><input type="checkbox" v-model="config.mirror.macos.enabled" />启用 .webloc 链接</label>
+                  <label class="field"><span>链接文件目录</span><input type="text" v-model="config.mirror.macos.directory" /></label>
+                </div>
+              </div>
+            </div>
+            <div class="settings-section">
+              <h4>命名模板</h4>
+              <label class="check"><input type="checkbox" v-model="followZotero" />跟随 Zotero 命名模板</label>
+              <label v-if="!followZotero" class="field field-top">
+                <span>自定义模板</span>
+                <textarea rows="5" spellcheck="false" v-model="config.mirror.windows.template"></textarea>
+              </label>
+            </div>
+            <div class="settings-section">
+              <h4>URI 模板</h4>
+              <div class="split">
+                <label class="field">
+                  <span class="label-with-help">Windows URI<span class="hint-icon" title="写入 .url 文件 URL= 后面的内容。默认 {select_uri}，可用占位符：{select_uri}、{item_key}、{itemKey}、{title}。"><HelpCircle class="icon" /></span></span>
+                  <input type="text" v-model="config.mirror.windows.uri_template" placeholder="{select_uri}" />
+                </label>
+                <label class="field">
+                  <span class="label-with-help">macOS URI<span class="hint-icon" title="写入 .webloc 文件的 URL。默认 {select_uri}，可用占位符：{select_uri}、{item_key}、{itemKey}、{title}。"><HelpCircle class="icon" /></span></span>
+                  <input type="text" v-model="config.mirror.macos.uri_template" placeholder="{select_uri}" />
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="save-bar">
+          <span :class="{ ok: !dirty }">{{ dirty ? "有未保存的修改" : "设置已保存" }}</span>
+          <button class="primary" :disabled="busy || !dirty" @click="saveConfig">
+            <Save class="icon" />保存设置
+          </button>
+        </div>
+      </section>
+
+      <section v-if="tab === 'doctor'" class="page">
+        <div class="page-title">
+          <span class="eyebrow">Doctor</span>
+          <h2>环境诊断</h2>
+          <p>检查 Zotero Local API、SQLite FTS5、快捷目录和本地数据库。</p>
+        </div>
+        <section class="panel">
+          <div class="toolbar compact">
+            <button class="primary" :disabled="busy" @click="runDoctor">
+              <Stethoscope class="icon" />运行诊断
+            </button>
+          </div>
+          <pre v-if="doctorLines.length" class="doctor">{{ doctorLines.join("\n") }}</pre>
+        </section>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span class="statusbar-item" :class="connectionTone">
+        <b></b>{{ connectionLabel }}
+      </span>
+      <span class="statusbar-item">
+        <Database class="icon" />{{ status ? status.item_count.toLocaleString() : 0 }} 条索引
+      </span>
+      <span class="statusbar-message">{{ footerMessage }}</span>
+      <button class="statusbar-button" @click="openDir('logs')">
+        <Terminal class="icon" />日志
       </button>
-      <button :class="{ active: tab === 'doctor' }" @click="tab = 'doctor'">诊断</button>
-    </nav>
-
-    <p v-if="!tauriAvailable" class="banner">
-      未检测到 Tauri 运行环境：浏览器预览模式下数据不可用，请在桌面程序中查看。
-    </p>
-    <p v-if="message" class="banner banner-ok" @click="message = ''">
-      {{ message }}<span class="banner-close">×</span>
-    </p>
-
-    <!-- 状态页 -->
-    <section v-if="tab === 'status' && status" class="page">
-      <div class="cards">
-        <div class="card">
-          <div class="card-value">{{ status.item_count.toLocaleString() }}</div>
-          <div class="card-label">
-            已索引条目
-            <i class="help" title="本地全文索引中的文献条目数。索引在本地，Zotero 关闭时也能搜索。">?</i>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-value">{{ status.library_count }}</div>
-          <div class="card-label">
-            文献库
-            <i class="help" title="已接入的 Zotero 库数量（个人库 + 群组库）。">?</i>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-value">{{ status.pending_jobs }}</div>
-          <div class="card-label">
-            待写入链接
-            <i class="help" title="等待写入快捷目录的 .url 文件数量。同步后自动生成，正常情况下会很快清零；程序崩溃未完成的任务会在下次启动时继续。">?</i>
-          </div>
-        </div>
-        <div class="card" :class="{ warn: status.failed_jobs > 0 }">
-          <div class="card-value">{{ status.failed_jobs }}</div>
-          <div class="card-label">
-            失败任务
-            <i class="help" title="多次重试仍失败的链接写入任务。可在诊断页排查目录可写性，或使用“重建索引”。">?</i>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>同步控制</h3>
-        <div class="row">
-          <span>
-            当前实例
-            <i
-              class="help"
-              title="当前索引绑定的 Zotero 程序标识（Server ID）。换电脑、重装 Zotero 或切换 profile 后该标识会变化，程序会自动检测到实例变更并重新全量同步，避免不同 Zotero 的数据混在一起。"
-              >?</i
-            >
-          </span>
-          <b>{{ status.instance || "未知" }}</b>
-        </div>
-        <div class="row"><span>最近同步</span><b>{{ fmtTime(status.last_sync_at) }}</b></div>
-        <div class="panel-actions">
-          <button class="primary" :disabled="busy" @click="syncNow">立即同步</button>
-          <button :disabled="busy" @click="togglePause">
-            {{ status.paused ? "恢复同步" : "暂停同步" }}
-          </button>
-          <button
-            class="danger"
-            :disabled="busy"
-            title="清空本地索引并全量重新同步。索引损坏或搜索结果异常时使用；耗时较长（数千条约一分钟）。"
-            @click="rebuildIndex"
-          >
-            重建索引
-          </button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>文献库</h3>
-        <div v-for="lib in status.libraries" :key="lib.kind + lib.zotero_library_id" class="lib">
-          <span class="tag">{{ lib.kind }}</span>
-          <span class="lib-name">{{ lib.display_name }}</span>
-          <span class="lib-meta">
-            id={{ lib.zotero_library_id }} · 版本 {{ lib.last_version }}
-            <i class="help" title="该库上次同步到的 Zotero 对象版本号，用于增量同步。为 0 表示此 Zotero 构建不暴露版本号，程序会自动改用全量比对模式。">?</i>
-          </span>
-          <span class="lib-state" :class="{ off: !lib.enabled }">
-            {{ lib.enabled ? "启用" : "停用" }}
-          </span>
-          <p v-if="lib.last_error" class="lib-error">{{ lib.last_error }}</p>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>目录与日志</h3>
-        <div class="link-row" @click="openDir('mirror')">
-          <span>快捷目录</span><em>Listary 索引此目录以定位文献</em>
-        </div>
-        <div class="link-row" @click="openDir('config')">
-          <span>配置目录</span><em>config.toml 所在位置</em>
-        </div>
-        <div class="link-row" @click="openDir('logs')">
-          <span>日志目录</span><em>排查同步问题时查看</em>
-        </div>
-        <div class="panel-actions">
-          <button
-            :disabled="busy"
-            title="按当前命名模板重新生成全部链接文件：名字变化的改名、磁盘上缺失的补写。改了模板后点这里一次到位。"
-            @click="refreshLinks"
-          >
-            刷新链接
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- 设置页 -->
-    <section v-if="tab === 'settings' && config" class="page">
-      <div class="panel">
-        <h3>外观</h3>
-        <div class="seg" role="radiogroup" aria-label="主题">
-          <button :class="{ active: themeMode === 'light' }" @click="themeMode = 'light'">
-            浅色
-          </button>
-          <button :class="{ active: themeMode === 'dark' }" @click="themeMode = 'dark'">
-            深色
-          </button>
-          <button :class="{ active: themeMode === 'system' }" @click="themeMode = 'system'">
-            跟随系统
-          </button>
-        </div>
-        <p class="hint">“跟随系统”会随 Windows 深/浅色自动切换，并每秒轮询一次系统状态。</p>
-      </div>
-
-      <div class="panel">
-        <h3>常规</h3>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.app.start_at_login" />
-          <span>开机自动启动</span>
-        </label>
-        <label class="field">
-          <span>
-            轮询周期（秒）
-            <i class="help" title="每隔多少秒检查一次 Zotero 的文献变更。过小会增加 Zotero 负载，建议 15–60 秒。">?</i>
-          </span>
-          <input type="number" v-model.number="config.app.poll_interval_seconds" min="5" />
-        </label>
-        <label class="field">
-          <span>日志级别</span>
-          <select v-model="config.app.log_level">
-            <option value="error">error</option>
-            <option value="warn">warn</option>
-            <option value="info">info</option>
-            <option value="debug">debug</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="panel">
-        <h3>Zotero 连接</h3>
-        <label class="field">
-          <span>Local API 地址</span>
-          <input type="text" v-model="config.zotero.api_base" />
-        </label>
-        <label class="field">
-          <span>请求超时（秒）</span>
-          <input type="number" v-model.number="config.zotero.request_timeout_seconds" min="1" />
-        </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.zotero.include_user_library" />
-          <span>索引个人库</span>
-        </label>
-        <label class="field">
-          <span>
-            群组库
-            <i class="help" title="是否索引你加入的 Zotero 群组库。改为“不索引”后，已索引的群组条目会在下次同步时移除。">?</i>
-          </span>
-          <select v-model="config.zotero.group_mode">
-            <option value="all">全部索引</option>
-            <option value="none">不索引</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="panel">
-        <h3>搜索与索引</h3>
-        <label class="field">
-          <span>默认结果数</span>
-          <input type="number" v-model.number="config.search.default_limit" min="1" max="100" />
-        </label>
-        <label class="field">
-          <span>结果数上限</span>
-          <input type="number" v-model.number="config.search.maximum_limit" min="1" max="500" />
-        </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.search.index_abstract" />
-          <span>索引摘要</span>
-        </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.search.index_extra" />
-          <span>
-            索引 Extra 字段
-            <i class="help" title="把条目的 Extra 备注字段也纳入搜索。适合在 Extra 里记了 DOI、笔记等内容的用户。">?</i>
-          </span>
-        </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.search.short_query_fallback" />
-          <span>
-            短查询回退
-            <i class="help" title="1–2 个字符的查询无法走全文索引（trigram 至少需 3 字符），开启后自动改用 LIKE 模糊匹配兜底，单字也能搜到。">?</i>
-          </span>
-        </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.search.store_raw_json" />
-          <span>保存原始 JSON（便于调试/迁移）</span>
-        </label>
-      </div>
-
-      <div class="panel">
-        <h3>
-          链接定位（Listary / Alfred）
-          <i class="help" title="为每条文献在快捷目录生成一个链接文件（Windows 为 .url，macOS 为 .webloc），双击即用 zotero:// 协议定位到 Zotero 中的条目。把快捷目录加入 Listary / Alfred 等启动器索引，就能按作者、年份、标题搜索并跳转。">?</i>
-        </h3>
-        <h4>Windows · .url（Listary）</h4>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.mirror.windows.enabled" />
-          <span>启用 .url 链接</span>
-        </label>
-        <label class="field">
-          <span>快捷目录</span>
-          <input type="text" v-model="config.mirror.windows.directory" />
-        </label>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="followZotero" />
-          <span>
-            跟随 Zotero 命名模板
-            <i class="help" title="直接使用 Zotero「设置 → 高级 → 文件名模板」里的附件重命名模板（prefs.js 的 attachmentRenameTemplate），改 Zotero 侧即可，无需在这里配置。取消勾选可自定义模板。">?</i>
-          </span>
-        </label>
-        <div v-if="followZotero" class="tpl-preview">
-          <template v-if="zoteroTpl">{{ zoteroTpl }}</template>
-          <span v-else class="tpl-missing">
-            未读取到 Zotero 的模板（Zotero 未安装或未设置），将使用内置默认：
-            {primary_creator} - {year} - {title} -- {item_key}
-          </span>
-        </div>
-        <label v-else class="field field-top">
-          <span>
-            自定义模板
-            <i class="help" title="支持两套语法：&#10;1. 简洁语法：{primary_creator}（第一作者）、{year}（年份）、{title}（标题）、{item_key}（条目键，自动附加保证不重名）。&#10;2. Zotero 模板语法（{{...}}，与 Zotero 附件重命名一致）：{{if itemType == &quot;journalArticle&quot;}}...{{endif}}、{{authors max=&quot;1&quot;}}、{{date replaceFrom=... replaceTo=...}} 等。模板含 {{ 即按 Zotero 语法解析。&#10;修改后保存，再到状态页点“刷新链接”应用到全部条目。">?</i>
-          </span>
-          <textarea
-            rows="5"
-            spellcheck="false"
-            v-model="config.mirror.windows.template"
-            placeholder="{primary_creator} - {year} - {title} -- {item_key}"
-          ></textarea>
-        </label>
-        <h4>macOS · .webloc</h4>
-        <label class="field checkbox">
-          <input type="checkbox" v-model="config.mirror.macos.enabled" />
-          <span>启用 .webloc 链接</span>
-        </label>
-        <label class="field">
-          <span>快捷目录</span>
-          <input type="text" v-model="config.mirror.macos.directory" />
-        </label>
-      </div>
-
-      <div class="panel">
-        <h3>存储</h3>
-        <label class="field">
-          <span>索引数据库路径</span>
-          <input type="text" v-model="config.storage.database" placeholder="留空使用默认位置" />
-        </label>
-        <p class="hint">
-          留空 = 默认位置（便携模式为 exe 旁 data\）；支持 %VAR% 和 ~。
-          修改后需重启程序生效，已有索引不会自动迁移。
-        </p>
-      </div>
-
-      <div class="save-bar">
-        <span v-if="dirty" class="save-hint">有未保存的修改</span>
-        <span v-else class="save-hint ok">设置已保存</span>
-        <button class="primary" :disabled="busy || !dirty" @click="saveConfig">保存设置</button>
-      </div>
-    </section>
-
-    <!-- 诊断页 -->
-    <section v-if="tab === 'doctor'" class="page">
-      <div class="panel">
-        <h3>环境诊断</h3>
-        <p class="hint">
-          检查 Zotero 本地 API 连通性、数据库与镜像目录可写性。同步异常时先运行诊断。
-        </p>
-        <div class="panel-actions">
-          <button class="primary" :disabled="busy" @click="runDoctor">运行诊断</button>
-        </div>
-      </div>
-      <div class="panel" v-if="doctorLines.length">
-        <pre class="doctor">{{ doctorLines.join("\n") }}</pre>
-      </div>
-    </section>
+    </footer>
   </div>
 </template>

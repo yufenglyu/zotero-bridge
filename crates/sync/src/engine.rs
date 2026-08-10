@@ -2,7 +2,8 @@
 
 use crate::normalizer;
 use crate::state::{LibrarySyncReport, SyncReport};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 use zsb_core::{
@@ -21,8 +22,9 @@ const UNSTABLE_BACKOFF_MS: u64 = 500;
 /// in a way that makes previously indexed rows incomplete (for example when
 /// new Zotero fields become available to the filename templater). A mismatch
 /// against the persisted value forces one full sync.
-/// 1 → initial; 2 → ItemData flatten map started preserving every field.
-const NORMALIZER_VERSION: &str = "2";
+/// 1 → initial; 2 → ItemData flatten map started preserving every field;
+/// 3 → legal items can derive display titles from type-specific fields.
+const NORMALIZER_VERSION: &str = "3";
 
 pub struct SyncEngine<'a, S: ZoteroSource> {
     source: &'a S,
@@ -473,7 +475,8 @@ fn plan_mirror_jobs(
                 .join(format!("{base}.{}", backend.extension()))
                 .to_string_lossy()
                 .into_owned();
-            let content = backend.build_content(&item.select_uri);
+            let uri = render_uri_template(&config.mirror_for(platform).uri_template, item);
+            let content = backend.build_content(&uri);
             match existing_names.get(&item.item_key) {
                 Some(old_base) if *old_base != base => jobs.push(NewMirrorJob {
                     operation: MirrorOperation::Rename,
@@ -486,7 +489,16 @@ fn plan_mirror_jobs(
                     new_path: Some(new_path),
                     content: Some(content),
                 }),
-                Some(_) => {} // Filename (and URI) unchanged: nothing to do.
+                Some(_)
+                    if !std::path::Path::new(&new_path).exists()
+                        || link_content_matches(std::path::Path::new(&new_path), &content) => {}
+                Some(_) => jobs.push(NewMirrorJob {
+                    operation: MirrorOperation::Replace,
+                    platform,
+                    old_path: None,
+                    new_path: Some(new_path),
+                    content: Some(content),
+                }),
                 None => jobs.push(NewMirrorJob {
                     operation: MirrorOperation::Create,
                     platform,
@@ -525,7 +537,24 @@ fn short_id(server_id: &str) -> String {
 pub struct MirrorRefreshReport {
     pub renamed: usize,
     pub rewritten: usize,
+    pub deleted: usize,
     pub unchanged: usize,
+}
+
+/// Read-only status of one local link-file directory.
+#[derive(Debug, Clone)]
+pub struct MirrorDirectoryStatus {
+    pub platform: Platform,
+    pub enabled: bool,
+    pub directory: String,
+    pub extension: String,
+    pub expected_files: usize,
+    pub actual_files: usize,
+    pub missing_files: usize,
+    pub orphan_files: usize,
+    pub stale_files: usize,
+    pub latest_created_at: Option<String>,
+    pub latest_modified_at: Option<String>,
 }
 
 /// Re-render every indexed item's mirror filename with the current
@@ -541,6 +570,8 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
     let template =
         zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platforms[0]).template);
     let mut report = MirrorRefreshReport::default();
+    let mut expected_paths: HashMap<Platform, HashSet<std::path::PathBuf>> = HashMap::new();
+    let mut cleanup_jobs = Vec::new();
 
     for lib in db.list_libraries(None)? {
         let items = db.items_for_library(lib.id)?;
@@ -573,10 +604,16 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
                 let backend = backend_for(platform);
                 let dir = config.mirror_dir(platform);
                 let new_path = dir.join(format!("{base}.{}", backend.extension()));
-                if !name_changed && new_path.exists() {
+                expected_paths
+                    .entry(platform)
+                    .or_default()
+                    .insert(new_path.clone());
+                let uri = render_uri_template(&config.mirror_for(platform).uri_template, item);
+                let content = backend.build_content(&uri);
+                if !name_changed && link_content_matches(&new_path, &content) {
+                    report.unchanged += 1;
                     continue;
                 }
-                let content = backend.build_content(&item.select_uri);
                 let new_path_s = new_path.to_string_lossy().into_owned();
                 if name_changed && old.is_some() {
                     let old_path = dir
@@ -597,7 +634,11 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
                     report.renamed += 1;
                 } else {
                     jobs.push(NewMirrorJob {
-                        operation: MirrorOperation::Create,
+                        operation: if new_path.exists() {
+                            MirrorOperation::Replace
+                        } else {
+                            MirrorOperation::Create
+                        },
                         platform,
                         old_path: None,
                         new_path: Some(new_path_s),
@@ -610,8 +651,6 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
                 let mut updated = item.clone();
                 updated.mirror_filename = Some(base);
                 upserts.push(updated);
-            } else {
-                report.unchanged += 1;
             }
         }
 
@@ -630,7 +669,177 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
             config.search.store_raw_json,
         )?;
     }
+
+    for &platform in &platforms {
+        let backend = backend_for(platform);
+        let dir = config.mirror_dir(platform);
+        if !dir.exists() {
+            continue;
+        }
+        let expected = expected_paths.entry(platform).or_default();
+        let ext = backend.extension();
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some(ext) {
+                continue;
+            }
+            if expected.contains(&path) {
+                continue;
+            }
+            cleanup_jobs.push(NewMirrorJob {
+                operation: MirrorOperation::Delete,
+                platform,
+                old_path: Some(path.to_string_lossy().into_owned()),
+                new_path: None,
+                content: None,
+            });
+            report.deleted += 1;
+        }
+    }
+    if !cleanup_jobs.is_empty() {
+        db.enqueue_jobs(&cleanup_jobs)?;
+    }
     Ok(report)
+}
+
+pub fn inspect_mirror_directories(
+    db: &Database,
+    config: &Config,
+) -> Result<Vec<MirrorDirectoryStatus>> {
+    let expectations = mirror_expectations(db, config)?;
+    let mut statuses = Vec::new();
+
+    for platform in [Platform::Windows, Platform::Macos] {
+        let backend = backend_for(platform);
+        let dir = config.mirror_dir(platform);
+        let expected = expectations.get(&platform);
+        let mut status = MirrorDirectoryStatus {
+            platform,
+            enabled: config.mirror_for(platform).enabled,
+            directory: dir.to_string_lossy().into_owned(),
+            extension: backend.extension().to_string(),
+            expected_files: expected.map(|m| m.len()).unwrap_or(0),
+            actual_files: 0,
+            missing_files: 0,
+            orphan_files: 0,
+            stale_files: 0,
+            latest_created_at: None,
+            latest_modified_at: None,
+        };
+
+        if let Some(expected) = expected {
+            for path in expected.keys() {
+                if !path.exists() {
+                    status.missing_files += 1;
+                }
+            }
+        }
+
+        if dir.exists() {
+            for entry in fs::read_dir(&dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some(backend.extension()) {
+                    continue;
+                }
+                status.actual_files += 1;
+                if let Ok(meta) = entry.metadata() {
+                    if let Ok(created) = meta.created() {
+                        update_latest(&mut status.latest_created_at, created);
+                    }
+                    if let Ok(modified) = meta.modified() {
+                        update_latest(&mut status.latest_modified_at, modified);
+                    }
+                }
+                match expected.and_then(|m| m.get(&path)) {
+                    Some(content) if !link_content_matches(&path, content) => {
+                        status.stale_files += 1;
+                    }
+                    Some(_) => {}
+                    None => status.orphan_files += 1,
+                }
+            }
+        } else {
+            status.missing_files = status.expected_files;
+        }
+
+        statuses.push(status);
+    }
+    Ok(statuses)
+}
+
+fn mirror_expectations(
+    db: &Database,
+    config: &Config,
+) -> Result<HashMap<Platform, HashMap<std::path::PathBuf, String>>> {
+    let platforms = enabled_platforms(config);
+    let mut expected: HashMap<Platform, HashMap<std::path::PathBuf, String>> = HashMap::new();
+    if platforms.is_empty() {
+        return Ok(expected);
+    }
+
+    let template =
+        zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platforms[0]).template);
+    for lib in db.list_libraries(None)? {
+        let items = db.items_for_library(lib.id)?;
+        let mut taken: HashMap<String, String> = HashMap::new();
+        let mut names = Vec::with_capacity(items.len());
+        for item in &items {
+            let mut base = filename::render_auto(&template, item);
+            if taken
+                .get(&base)
+                .is_some_and(|owner| *owner != item.item_key)
+            {
+                base = filename::with_key_suffix(&base, &item.item_key);
+            }
+            taken.insert(base.clone(), item.item_key.clone());
+            names.push(base);
+        }
+
+        for (item, base) in items.iter().zip(names) {
+            for &platform in &platforms {
+                let backend = backend_for(platform);
+                let dir = config.mirror_dir(platform);
+                let path = dir.join(format!("{base}.{}", backend.extension()));
+                let uri = render_uri_template(&config.mirror_for(platform).uri_template, item);
+                let content = backend.build_content(&uri);
+                expected.entry(platform).or_default().insert(path, content);
+            }
+        }
+    }
+    Ok(expected)
+}
+
+fn update_latest(target: &mut Option<String>, value: std::time::SystemTime) {
+    if let Some(formatted) = zsb_core::timeutil::system_time_rfc3339(value) {
+        if target
+            .as_deref()
+            .map(|t| formatted.as_str() > t)
+            .unwrap_or(true)
+        {
+            *target = Some(formatted);
+        }
+    }
+}
+
+fn render_uri_template(template: &str, item: &zsb_core::IndexedItem) -> String {
+    let template = if template.trim().is_empty() {
+        "{select_uri}"
+    } else {
+        template
+    };
+    template
+        .replace("{select_uri}", &item.select_uri)
+        .replace("{item_key}", &item.item_key)
+        .replace("{itemKey}", &item.item_key)
+        .replace("{title}", &item.title)
+}
+
+fn link_content_matches(path: &std::path::Path, expected: &str) -> bool {
+    fs::read_to_string(path)
+        .map(|actual| actual == expected)
+        .unwrap_or(false)
 }
 
 fn uuid_v4() -> String {
@@ -813,7 +1022,30 @@ mod tests {
 
         // Second refresh is a no-op.
         let report = refresh_mirrors(&mut db, &cfg).unwrap();
-        assert_eq!((report.renamed, report.rewritten), (0, 0));
+        assert_eq!(
+            (report.renamed, report.rewritten, report.deleted),
+            (0, 0, 0)
+        );
+
+        // URI template changes do not affect the filename, but refresh must
+        // still overwrite the existing shortcut content.
+        cfg.mirror.windows.uri_template = "zotero://select/items/{item_key}".into();
+        let report = refresh_mirrors(&mut db, &cfg).unwrap();
+        assert_eq!(
+            (report.renamed, report.rewritten, report.deleted),
+            (0, 2, 0)
+        );
+        zsb_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
+        let rewritten =
+            std::fs::read_to_string(dir.join("李四 - 2024 - 燃气轮机研究 -- BBBB0002.url"))
+                .unwrap();
+        assert!(rewritten.contains("URL=zotero://select/items/BBBB0002"));
+
+        std::fs::write(dir.join("orphan.url"), "stale").unwrap();
+        let report = refresh_mirrors(&mut db, &cfg).unwrap();
+        assert_eq!(report.deleted, 1);
+        zsb_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
+        assert!(!dir.join("orphan.url").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "zsb-index"
-description = "Local SQLite FTS5 index for Zotero Search Bridge"
+description = "Local SQLite FTS5 index for Zotero Bridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

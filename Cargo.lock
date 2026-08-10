@@ -5185,13 +5185,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
-name = "zsb"
+name = "zotero-bridge"
 version = "0.1.0"
 dependencies = [
  "clap",
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber",
+ "zsb-core",
+ "zsb-index",
+ "zsb-launcher",
+ "zsb-mirror",
+ "zsb-sync",
+ "zsb-zotero-api",
+]
+
+[[package]]
+name = "zotero-bridge-desktop"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tokio",
+ "tracing",
+ "tracing-appender",
  "tracing-subscriber",
  "zsb-core",
  "zsb-index",
@@ -5210,27 +5231,6 @@ dependencies = [
  "time",
  "toml 0.8.2",
  "uuid",
-]
-
-[[package]]
-name = "zsb-desktop"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "zsb-core",
- "zsb-index",
- "zsb-launcher",
- "zsb-mirror",
- "zsb-sync",
- "zsb-zotero-api",
 ]
 
 [[package]]

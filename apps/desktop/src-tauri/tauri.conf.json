@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Zotero Search Bridge",
+  "productName": "Zotero Bridge",
   "version": "0.1.0",
-  "identifier": "com.zsb.app",
+  "identifier": "com.zotero-bridge.app",
   "build": {
     "frontendDist": "../dist"
   },
@@ -10,11 +10,11 @@
     "windows": [
       {
         "label": "main",
-        "title": "Zotero Search Bridge",
-        "width": 920,
-        "height": 680,
-        "minWidth": 720,
-        "minHeight": 520,
+        "title": "Zotero Bridge",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 620,
         "resizable": true
       }
     ],
@@ -25,9 +25,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "publisher": "Zotero Search Bridge",
+    "publisher": "Zotero Bridge",
     "shortDescription": "External fast search and item locator for Zotero",
-    "longDescription": "Zotero Search Bridge syncs your Zotero library into a local full-text index and exposes it to Listary, Alfred and Raycast via zotero:// select links.",
+    "longDescription": "Zotero Bridge syncs your Zotero library into a local full-text index and exposes it to Listary, Alfred and Raycast via zotero:// select links.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -35,7 +35,7 @@
       "icons/icon.ico"
     ],
     "resources": [],
-    "copyright": "Copyright (c) 2026 Zotero Search Bridge contributors",
+    "copyright": "Copyright (c) 2026 Zotero Bridge contributors",
     "category": "Utility",
     "windows": {
       "nsis": {

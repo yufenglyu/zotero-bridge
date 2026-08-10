@@ -30,6 +30,6 @@ LIMIT（与 SQL 拼装顺序一致，勿按词序绑定）。
 
 ## 维护
 
-- `zsb rebuild` → `INSERT INTO items_fts(items_fts) VALUES('rebuild')`
-- `zsb verify-index` → `VALUES('integrity-check', 1)`
-- `zsb optimize` → `VALUES('optimize')`
+- `zotero-bridge rebuild` → `INSERT INTO items_fts(items_fts) VALUES('rebuild')`
+- `zotero-bridge verify-index` → `VALUES('integrity-check', 1)`
+- `zotero-bridge optimize` → `VALUES('optimize')`

@@ -113,6 +113,34 @@ pub fn container_title(data: &zsb_zotero_api::ItemData) -> String {
     String::new()
 }
 
+fn other_text(data: &zsb_zotero_api::ItemData, keys: &[&str]) -> String {
+    for key in keys {
+        if let Some(value) = data.other.get(*key) {
+            let text = match value {
+                serde_json::Value::String(s) => clean_text(s),
+                serde_json::Value::Number(n) => n.to_string(),
+                _ => String::new(),
+            };
+            if !text.is_empty() {
+                return text;
+            }
+        }
+    }
+    String::new()
+}
+
+fn display_title(data: &zsb_zotero_api::ItemData, key: &str) -> String {
+    for candidate in [
+        clean_text(&data.title),
+        other_text(data, &["nameOfAct", "caseName", "billTitle", "subject"]),
+    ] {
+        if !candidate.is_empty() {
+            return candidate;
+        }
+    }
+    format!("[无标题] -- {key}")
+}
+
 /// Hash of the normalized searchable fields; used to skip no-op updates.
 pub fn content_hash(item: &IndexedItem) -> String {
     let mut hasher = Sha256::new();
@@ -147,14 +175,7 @@ pub fn normalize_item(
         return None;
     }
 
-    let title = {
-        let t = clean_text(&raw.data.title);
-        if t.is_empty() {
-            format!("[无标题] -- {}", raw.key)
-        } else {
-            t
-        }
-    };
+    let title = display_title(&raw.data, &raw.key);
     let creators = format_creators(&raw.data.creators);
     let primary_creator = pick_primary_creator(&raw.data.creators);
     let year = extract_year(&raw.data.date);
@@ -297,6 +318,16 @@ mod tests {
                 .unwrap();
         let item = normalize_item(&raw, &RemoteLibrary::user(), 1, true, true, true).unwrap();
         assert_eq!(item.title, "[无标题] -- K1ABCD");
+    }
+
+    #[test]
+    fn legal_title_uses_type_specific_fields() {
+        let raw: ZoteroItem = serde_json::from_str(
+            r#"{"key":"LAW12345","version":1,"data":{"itemType":"statute","nameOfAct":"中华人民共和国民法典"}}"#,
+        )
+        .unwrap();
+        let item = normalize_item(&raw, &RemoteLibrary::user(), 1, true, true, true).unwrap();
+        assert_eq!(item.title, "中华人民共和国民法典");
     }
 
     #[test]

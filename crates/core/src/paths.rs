@@ -119,11 +119,17 @@ pub fn expand_path(input: &str) -> PathBuf {
 // ---------------------------------------------------------------------
 
 /// Environment variable overriding the config file location.
-pub const ENV_CONFIG: &str = "ZSB_CONFIG";
+pub const ENV_CONFIG: &str = "ZOTERO_BRIDGE_CONFIG";
+/// Legacy environment variable kept for existing scripts.
+pub const LEGACY_ENV_CONFIG: &str = "ZSB_CONFIG";
 /// Environment variable overriding the index database location.
-pub const ENV_DATABASE: &str = "ZSB_DATABASE";
+pub const ENV_DATABASE: &str = "ZOTERO_BRIDGE_DATABASE";
+/// Legacy environment variable kept for existing scripts.
+pub const LEGACY_ENV_DATABASE: &str = "ZSB_DATABASE";
 /// Marker filename enabling portable mode when placed next to the exe.
-pub const PORTABLE_CONFIG_NAME: &str = "zsb-config.toml";
+pub const PORTABLE_CONFIG_NAME: &str = "zotero-bridge-config.toml";
+/// Legacy portable marker kept so existing portable installs do not lose data.
+pub const LEGACY_PORTABLE_CONFIG_NAME: &str = "zsb-config.toml";
 
 /// Directory containing the running executable.
 pub fn exe_dir() -> Option<PathBuf> {
@@ -134,12 +140,14 @@ pub fn exe_dir() -> Option<PathBuf> {
 
 /// Portable-mode marker config next to the executable, if present.
 pub fn portable_config_file() -> Option<PathBuf> {
-    let candidate = exe_dir()?.join(PORTABLE_CONFIG_NAME);
-    if candidate.exists() {
-        Some(candidate)
-    } else {
-        None
+    let dir = exe_dir()?;
+    for name in [PORTABLE_CONFIG_NAME, LEGACY_PORTABLE_CONFIG_NAME] {
+        let candidate = dir.join(name);
+        if candidate.exists() {
+            return Some(candidate);
+        }
     }
+    None
 }
 
 /// Whether the given config path is the portable marker next to the exe.
@@ -150,14 +158,17 @@ pub fn is_portable_config(path: &std::path::Path) -> bool {
 /// Resolve the config file location.
 ///
 /// Priority: explicit override (CLI flag) > `$ZSB_CONFIG` > portable
-/// marker `<exe>/zsb-config.toml` > platform default.
+/// marker `<exe>/zotero-bridge-config.toml` > legacy marker
+/// `<exe>/zsb-config.toml` > platform default.
 pub fn resolve_config_file(cli_override: Option<&std::path::Path>) -> Result<PathBuf> {
     if let Some(p) = cli_override {
         return Ok(p.to_path_buf());
     }
-    if let Some(v) = std::env::var_os(ENV_CONFIG) {
-        if !v.is_empty() {
-            return Ok(PathBuf::from(v));
+    for name in [ENV_CONFIG, LEGACY_ENV_CONFIG] {
+        if let Some(v) = std::env::var_os(name) {
+            if !v.is_empty() {
+                return Ok(PathBuf::from(v));
+            }
         }
     }
     if let Some(p) = portable_config_file() {
@@ -179,9 +190,11 @@ pub fn resolve_database_file(
     if let Some(p) = cli_override {
         return Ok(p.to_path_buf());
     }
-    if let Some(v) = std::env::var_os(ENV_DATABASE) {
-        if !v.is_empty() {
-            return Ok(PathBuf::from(v));
+    for name in [ENV_DATABASE, LEGACY_ENV_DATABASE] {
+        if let Some(v) = std::env::var_os(name) {
+            if !v.is_empty() {
+                return Ok(PathBuf::from(v));
+            }
         }
     }
     if let Some(db) = config_db {

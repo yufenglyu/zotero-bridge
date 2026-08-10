@@ -1,6 +1,6 @@
 [package]
 name = "zsb-core"
-description = "Zotero Search Bridge core types: config, models, errors"
+description = "Zotero Bridge core types: config, models, errors"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

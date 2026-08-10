@@ -357,6 +357,8 @@ fn resolve(name: &str, ctx: &Ctx) -> String {
         "itemType" => data_str(ctx, &["itemType"]).unwrap_or_else(|| ctx.item.item_type.clone()),
         "date" => data_str(ctx, &["date", "issueDate", "filingDate"])
             .unwrap_or_else(|| ctx.item.year.clone()),
+        "dateEnacted" => data_str(ctx, &["dateEnacted", "enactmentDate", "date"])
+            .unwrap_or_else(|| ctx.item.year.clone()),
         "year" => {
             let date = resolve("date", ctx);
             if date.is_empty() {
@@ -370,6 +372,16 @@ fn resolve(name: &str, ctx: &Ctx) -> String {
         "itemKey" | "item_key" => ctx.item.item_key.clone(),
         "creators" => ctx.item.creators.clone(),
         "primaryCreator" | "primary_creator" => ctx.item.primary_creator.clone(),
+        "nameOfAct" => data_str(ctx, &["nameOfAct", "title"]).unwrap_or_else(|| {
+            if ctx.item.title.starts_with("[无标题] -- ") {
+                String::new()
+            } else {
+                ctx.item.title.clone()
+            }
+        }),
+        "publicLawNumber" => {
+            data_str(ctx, &["publicLawNumber", "codeNumber", "number", "code"]).unwrap_or_default()
+        }
         "containerTitle" | "container_title" | "publicationTitle" => {
             data_str(ctx, &["publicationTitle", "bookTitle", "proceedingsTitle"])
                 .unwrap_or_else(|| ctx.item.container_title.clone())
@@ -656,6 +668,19 @@ mod tests {
                 &patent
             ),
             "CN113568705B T（2024）"
+        );
+        // statute: Zotero legal records may use type-specific fields. Keep the
+        // user's Zotero template working even when some fields are absent.
+        let statute = item_with_raw(
+            r#"{"key":"K10","version":1,"data":{"itemType":"statute","title":"中华人民共和国民法典","date":"2020-05-28","codeNumber":"主席令第四十五号","creators":[]}}"#,
+            "K10",
+        );
+        assert_eq!(
+            render(
+                "《{{nameOfAct replaceFrom='[\\\\/:?*\"<>|]' replaceTo=\"_\" regexOpts=\"g\"}}》（{{if publicLawNumber}}{{publicLawNumber}}，{{endif}}{{if dateEnacted}}{{dateEnacted replaceFrom=\"[^0-9].*\" replaceTo=\"\" regexOpts=\"g\"}}{{endif}}）",
+                &statute
+            ),
+            "《中华人民共和国民法典》（主席令第四十五号，2020）"
         );
     }
 

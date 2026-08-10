@@ -58,6 +58,7 @@ pub struct MirrorPlatformConfig {
     pub enabled: bool,
     pub directory: String,
     pub template: String,
+    pub uri_template: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -111,6 +112,7 @@ impl Default for SearchConfig {
 }
 
 pub const DEFAULT_TEMPLATE: &str = "{primary_creator} - {year} - {title} -- {item_key}";
+pub const DEFAULT_URI_TEMPLATE: &str = "{select_uri}";
 
 impl Default for MirrorConfig {
     fn default() -> Self {
@@ -121,11 +123,13 @@ impl Default for MirrorConfig {
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| "%LOCALAPPDATA%/ZoteroSearchBridge/mirrors/windows".into()),
                 template: DEFAULT_TEMPLATE.into(),
+                uri_template: DEFAULT_URI_TEMPLATE.into(),
             },
             macos: MirrorPlatformConfig {
                 enabled: false,
                 directory: "~/Zotero Links".into(),
                 template: DEFAULT_TEMPLATE.into(),
+                uri_template: DEFAULT_URI_TEMPLATE.into(),
             },
         }
     }
@@ -137,6 +141,7 @@ impl Default for MirrorPlatformConfig {
             enabled: false,
             directory: String::new(),
             template: DEFAULT_TEMPLATE.into(),
+            uri_template: DEFAULT_URI_TEMPLATE.into(),
         }
     }
 }
@@ -202,6 +207,7 @@ mod tests {
         assert_eq!(parsed.zotero.api_base, "http://localhost:23119/api");
         assert_eq!(parsed.search.default_limit, 30);
         assert!(parsed.mirror.windows.template.contains("{item_key}"));
+        assert_eq!(parsed.mirror.windows.uri_template, DEFAULT_URI_TEMPLATE);
     }
 
     #[test]

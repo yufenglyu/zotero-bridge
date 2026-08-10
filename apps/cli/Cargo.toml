@@ -1,12 +1,12 @@
 [package]
-name = "zsb"
-description = "Zotero Search Bridge CLI"
+name = "zotero-bridge"
+description = "Zotero Bridge CLI"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "zsb"
+name = "zotero-bridge"
 path = "src/main.rs"
 
 [dependencies]

@@ -9,5 +9,8 @@ pub mod engine;
 pub mod normalizer;
 pub mod state;
 
-pub use engine::{enabled_platforms, refresh_mirrors, MirrorRefreshReport, SyncEngine};
+pub use engine::{
+    enabled_platforms, inspect_mirror_directories, refresh_mirrors, MirrorDirectoryStatus,
+    MirrorRefreshReport, SyncEngine,
+};
 pub use state::{LibrarySyncReport, SyncReport};

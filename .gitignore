@@ -1,10 +1,10 @@
-/target
+/target/
 **/*.rs.bk
 *.tmp
 node_modules/
 apps/desktop/dist/
 smoke_screen.png
-/packaging/*.exe
-
-# portable staging dir (zip 是唯一分发物)
-zsb-portable/
+*.log
+release-assets/
+.DS_Store
+Thumbs.db

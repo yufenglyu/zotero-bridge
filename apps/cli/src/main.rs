@@ -1,4 +1,4 @@
-//! zsb: Zotero Search Bridge command line interface (spec section 16).
+//! Zotero Bridge command line interface (spec section 16).
 
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -11,9 +11,9 @@ use zsb_zotero_api::LocalApiClient;
 
 #[derive(Parser)]
 #[command(
-    name = "zsb",
+    name = "zotero-bridge",
     version,
-    about = "Zotero Search Bridge - external fast search and item locator for Zotero"
+    about = "Zotero Bridge - external fast search and item locator for Zotero"
 )]
 struct Cli {
     /// Path to config.toml (default: platform config directory).
@@ -94,7 +94,7 @@ async fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(Error::ZoteroOffline(msg)) => {
             eprintln!("Zotero 未运行或不可达：{msg}");
-            eprintln!("提示：本地搜索仍然可用 (zsb search <关键词>)。");
+            eprintln!("提示：本地搜索仍然可用 (zotero-bridge search <关键词>)。");
             ExitCode::from(2)
         }
         Err(Error::ApiDisabled) => {
@@ -145,7 +145,9 @@ async fn run(cli: Cli) -> Result<()> {
             let (kind, id) = parse_library(&library)?;
             let db = Database::open(&db_path)?;
             let uri = db.find_select_uri(kind, &id, &key)?.ok_or_else(|| {
-                Error::ItemNotFound(format!("{library}/{key}（先运行 zsb sync 建立索引）"))
+                Error::ItemNotFound(format!(
+                    "{library}/{key}（先运行 zotero-bridge sync 建立索引）"
+                ))
             })?;
             SystemLauncher.open(&uri)?;
             println!("已打开：{uri}");
@@ -187,7 +189,7 @@ async fn run(cli: Cli) -> Result<()> {
             let ok = db.fts_integrity_check()?;
             println!("FTS 一致性检查：{}", if ok { "OK" } else { "失败" });
             if !ok {
-                println!("建议运行：zsb rebuild");
+                println!("建议运行：zotero-bridge rebuild");
             }
         }
         Commands::CleanMirrors => {
@@ -414,7 +416,7 @@ fn enabled_platforms(config: &Config) -> Vec<Platform> {
 
 fn print_status(db: &Database) -> Result<()> {
     let stats = db.stats()?;
-    println!("Zotero Search Bridge 状态");
+    println!("Zotero Bridge 状态");
     println!(
         "  数据库：{}",
         db.path()
@@ -510,7 +512,7 @@ async fn doctor(config: &Config, db_path: &std::path::Path) {
         let dir = config.mirror_dir(platform);
         let ok = std::fs::create_dir_all(&dir)
             .and_then(|_| {
-                let probe = dir.join(".zsb-write-test");
+                let probe = dir.join(".zotero-bridge-write-test");
                 std::fs::write(&probe, b"ok")?;
                 std::fs::remove_file(&probe)
             })

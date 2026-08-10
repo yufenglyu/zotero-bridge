@@ -1,6 +1,6 @@
 [package]
-name = "zsb-desktop"
-description = "Zotero Search Bridge desktop tray app (Tauri)"
+name = "zotero-bridge-desktop"
+description = "Zotero Bridge desktop tray app (Tauri)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

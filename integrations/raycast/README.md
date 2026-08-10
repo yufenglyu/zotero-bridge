@@ -4,7 +4,7 @@
 TypeScript Extension），输入变化时调用：
 
 ```sh
-zsb search "<query>" --format json --limit 30
+zotero-bridge search "<query>" --format json --limit 30
 ```
 
 返回结构（`SearchResult[]`）：
@@ -40,7 +40,7 @@ type Hit = {
 };
 
 export default function Command() {
-  const { data, isLoading, revalidate } = useExec<Hit[]>("zsb", ["search", "{query}", "--format", "json"]);
+  const { data, isLoading, revalidate } = useExec<Hit[]>("zotero-bridge", ["search", "{query}", "--format", "json"]);
   // 简化示意：把 data 映射为 List.Item
   // 主操作：await open(hit.select_uri)
   // 附加操作：复制标题 / 复制 zotero 链接

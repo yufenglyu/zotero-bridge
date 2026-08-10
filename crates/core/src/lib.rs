@@ -1,5 +1,5 @@
 //! zsb-core: shared configuration, data models and error types for
-//! Zotero Search Bridge.
+//! Zotero Bridge.
 
 pub mod config;
 pub mod errors;

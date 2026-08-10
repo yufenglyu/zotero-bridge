@@ -1,7 +1,7 @@
 // Prevent an extra console window from staying open on Windows in release.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! Zotero Search Bridge desktop app (M4): system tray + settings window.
+//! Zotero Bridge desktop app (M4): system tray + settings window.
 //!
 //! All sync, index and file work reuses the shared crates; the frontend
 //! only displays status and edits configuration.
@@ -41,6 +41,21 @@ struct LibraryView {
     last_error: Option<String>,
 }
 
+#[derive(Serialize, Clone)]
+struct MirrorDirectoryView {
+    platform: String,
+    enabled: bool,
+    directory: String,
+    extension: String,
+    expected_files: usize,
+    actual_files: usize,
+    missing_files: usize,
+    orphan_files: usize,
+    stale_files: usize,
+    latest_created_at: Option<String>,
+    latest_modified_at: Option<String>,
+}
+
 #[derive(Serialize)]
 struct StatusView {
     instance: String,
@@ -52,6 +67,7 @@ struct StatusView {
     paused: bool,
     zotero_running: bool,
     libraries: Vec<LibraryView>,
+    mirror_directories: Vec<MirrorDirectoryView>,
 }
 
 // ---------------------------------------------------------------------
@@ -139,9 +155,26 @@ async fn get_status(state: State<'_, AppState>) -> Result<StatusView, String> {
         })
         .collect();
     let instance = db.active_instance_id().ok().flatten().unwrap_or_default();
+    let cfg = state.config.read().unwrap().clone();
+    let mirror_directories = zsb_sync::inspect_mirror_directories(&db, &cfg)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|m| MirrorDirectoryView {
+            platform: m.platform.as_str().to_string(),
+            enabled: m.enabled,
+            directory: m.directory,
+            extension: m.extension,
+            expected_files: m.expected_files,
+            actual_files: m.actual_files,
+            missing_files: m.missing_files,
+            orphan_files: m.orphan_files,
+            stale_files: m.stale_files,
+            latest_created_at: m.latest_created_at,
+            latest_modified_at: m.latest_modified_at,
+        })
+        .collect();
 
     let zotero_running = {
-        let cfg = state.config.read().unwrap().clone();
         match LocalApiClient::new(&cfg.zotero.api_base, 2) {
             Ok(client) => {
                 use zsb_zotero_api::ZoteroSource;
@@ -161,6 +194,7 @@ async fn get_status(state: State<'_, AppState>) -> Result<StatusView, String> {
         paused: state.paused.load(Ordering::Relaxed),
         zotero_running,
         libraries,
+        mirror_directories,
     })
 }
 
@@ -229,9 +263,10 @@ fn refresh_links(state: State<'_, AppState>) -> Result<String, String> {
         failed += w.failed;
     }
     Ok(format!(
-        "链接已刷新：改名 {}，补写 {}，无需变动 {}{}",
+        "链接已刷新：改名 {}，补写/覆盖 {}，删除 {}，无需变动 {}{}",
         report.renamed,
         report.rewritten,
+        report.deleted,
         report.unchanged,
         if failed > 0 {
             format!("（{} 项写入失败，可在诊断页排查）", failed)
@@ -331,7 +366,7 @@ async fn doctor(state: State<'_, AppState>) -> Result<Vec<String>, String> {
         let dir = cfg.mirror_dir(platform);
         let ok = std::fs::create_dir_all(&dir)
             .and_then(|_| {
-                let probe = dir.join(".zsb-write-test");
+                let probe = dir.join(".zotero-bridge-write-test");
                 std::fs::write(&probe, b"ok")?;
                 std::fs::remove_file(&probe)
             })
@@ -433,7 +468,7 @@ fn main() {
     // File logging into the platform log directory.
     if let Ok(log_dir) = zsb_core::paths::log_dir() {
         let _ = std::fs::create_dir_all(&log_dir);
-        let appender = tracing_appender::rolling::never(&log_dir, "zsb.log");
+        let appender = tracing_appender::rolling::never(&log_dir, "zotero-bridge.log");
         let (writer, _guard) = tracing_appender::non_blocking(appender);
         tracing_subscriber::fmt()
             .with_writer(writer)
@@ -490,7 +525,7 @@ fn main() {
 
             TrayIconBuilder::with_id("main")
                 .icon(icon)
-                .tooltip("Zotero Search Bridge")
+                .tooltip("Zotero Bridge")
                 .menu(&menu)
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "show" => {
@@ -540,5 +575,5 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running Zotero Search Bridge");
+        .expect("error while running Zotero Bridge");
 }
