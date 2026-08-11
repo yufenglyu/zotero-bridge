@@ -1,17 +1,19 @@
 # Zotero Bridge
 
-Zotero Bridge 是一个本地桌面工具，用来把 Zotero 文献库同步到本地 SQLite 全文索引，并为每条可检索文献生成本地链接文件。你可以用 Listary、Finder、Spotlight 或文件管理器快速搜索这些链接文件，打开后直接定位到 Zotero 条目。
+Zotero Bridge 是一个 Zotero 本地增强工具，用来同步本地文献索引、生成可搜索链接文件，并备份/迁移 Zotero 与插件设置。你可以用 Listary、Finder、Spotlight 或文件管理器快速搜索链接文件，也可以把 `prefs.js` 中的设置项结构化迁移到另一台电脑。
 
 项目不会上传文献数据，不需要 Zotero Web API Key，也不会直接读写 `zotero.sqlite`。所有同步都通过 Zotero Local API 完成。
 
 ## 功能
 
-- 桌面托盘程序，后台轮询 Zotero Local API。
-- 增量同步文献元数据到本地 SQLite FTS5 索引。
-- 自动生成和刷新 Windows `.url`、macOS `.webloc` 链接文件。
-- 默认跟随 Zotero 附件命名模板，也支持自定义链接文件命名模板。
-- 支持自定义链接文件 URI 模板。
-- 诊断 Zotero 连接、索引、链接目录和日志状态。
+- “索引链接”页：同步 Zotero 文献、维护本地 SQLite FTS5 索引、生成链接文件，并查看链接文件目录状态。
+- “设置备份”页：从指定 Zotero profile 的 `prefs.js` 扫描设置，按 Zotero 本身、插件、Zotero 框架和未知来源分组管理。
+- “设置”页：只保留基础运行配置，包括 Zotero Local API、轮询周期、日志级别、个人库/群组库范围和配置目录入口。
+- 自动生成和刷新 Windows `.url`、macOS `.webloc` 链接文件，用于 Listary、Finder、Spotlight、Alfred、Raycast 或文件管理器检索。
+- 默认跟随 Zotero 附件命名模板，也支持自定义链接文件命名模板和 URI 模板。
+- 支持链接文件状态检查，显示本地文件数、应有文件数、最近更新时间，以及缺失、孤立或过期状态。
+- 支持备份、恢复、预览、编辑、删除和写回 `prefs.js` 设置项，并在导入时逐项迁移路径。
+- 诊断 Zotero 连接、索引、链接目录和日志状态，诊断结果以弹窗显示。
 
 ## 使用前准备
 
@@ -23,7 +25,7 @@ Zotero Bridge 是一个本地桌面工具，用来把 Zotero 文献库同步到�
    ```
 
 3. 启动 `zotero-bridge`。
-4. 在状态页点击“立即同步”。
+4. 在“索引链接”页点击“立即同步”。
 
 Zotero 视图中的项目数可能大于 Zotero Bridge 的“已索引条目”。这是预期行为：Zotero Bridge 只索引顶层文献条目，顶层附件、笔记和批注不会进入索引。
 
@@ -38,11 +40,11 @@ Zotero 视图中的项目数可能大于 Zotero Bridge 的“已索引条目”�
 推荐用法：
 
 1. 在 Zotero Bridge 中完成首次同步。
-2. 打开状态页的“链接文件目录”，确认 `.url` 文件已经生成。
+2. 打开“索引链接”页的“链接文件目录”，确认链接文件已经生成。
 3. 在 Listary 中把该目录加入索引。
 4. 之后可直接在 Listary 中搜索作者、年份、标题或 Item Key，打开结果即可定位到 Zotero。
 
-链接文件目录可以在设置页修改。修改目录、命名模板或 URI 模板后，点击状态页“刷新链接”可按当前索引重新补写、覆盖、改名和清理链接文件。
+链接文件目录、命名模板和 URI 模板都在“索引链接”页修改，输入后会自动保存。修改目录、命名模板或 URI 模板后，点击“刷新链接”可按当前索引重新补写、覆盖、改名和清理链接文件。
 
 ## macOS
 
@@ -55,11 +57,11 @@ Zotero 视图中的项目数可能大于 Zotero Bridge 的“已索引条目”�
 推荐用法：
 
 1. 在 Zotero Bridge 中完成首次同步。
-2. 打开状态页的“链接文件目录”，确认 `.webloc` 文件已经生成。
+2. 打开“索引链接”页的“链接文件目录”，确认链接文件已经生成。
 3. 使用 Finder 或 Spotlight 搜索该目录中的链接文件。
 4. 打开 `.webloc` 文件即可定位到 Zotero。
 
-如果你使用 Alfred、Raycast 或其他启动器，可以把 `~/Zotero Links` 加入对应工具的文件搜索范围。链接文件目录可以在设置页修改。
+如果你使用 Alfred、Raycast 或其他启动器，可以把 `~/Zotero Links` 加入对应工具的文件搜索范围。链接文件目录可以在“索引链接”页修改。
 
 ## 同步与链接刷新
 
@@ -71,7 +73,7 @@ Zotero 视图中的项目数可能大于 Zotero Bridge 的“已索引条目”�
 
 默认开启“跟随 Zotero 命名模板”。此时 Zotero Bridge 会尽量使用 Zotero 当前附件命名模板生成链接文件名。
 
-关闭后可以使用自定义模板，例如：
+关闭“跟随 Zotero 命名模板”后可以使用自定义模板，例如：
 
 ```text
 {primary_creator} - {year} - {title} -- {item_key}
@@ -97,6 +99,30 @@ Zotero 视图中的项目数可能大于 Zotero Bridge 的“已索引条目”�
 - `{title}`：文献标题。
 
 普通用户保持默认即可。
+
+## 设置备份与恢复
+
+“设置备份”页用于迁移 Zotero 与插件保存在 `prefs.js` 中的偏好项。它不会整文件覆盖 `prefs.js`，而是把设置结构化备份为 JSON，并在恢复时按 key 合并写回。
+
+如果本机有多个 Zotero profile，可以在“源配置”中填写对应的 `prefs.js` 文件路径，或填写 profile 目录。留空时使用 Zotero Bridge 自动识别到的默认 profile。
+
+备份时会：
+
+- 导出 Zotero 原生设置和插件设置。
+- 按 Zotero 本身、插件、Zotero 框架和未知来源分组显示设置项数量。
+- 展开任一分组后显示具体设置项明细，可在当前分组内按类型和关键字筛选。
+- 支持编辑或从本次草稿删除设置项；点击“备份”会导出草稿，点击“写回”会把草稿保存回源 `prefs.js`。
+- 自动识别路径项，包括插件里的路径配置。
+- 标记疑似敏感项，例如密码、token、cookie、账号和认证相关设置；这些项会进入备份和恢复草稿，请按个人资料处理备份文件。
+
+恢复时会：
+
+- 先生成恢复预览，显示新增、修改、不变、路径跳过数量。
+- 默认跳过未修改的路径项，避免把另一台电脑的绝对路径写入当前机器。
+- 在“路径迁移”中逐项查看备份里的旧路径，并为当前机器填写新路径；填写后的新路径会覆盖对应旧路径后导入。
+- 写回前自动备份当前 `prefs.js` 为 `.bak` 文件。
+
+应用恢复或写回前请先关闭 Zotero。Zotero 运行时可能在退出时重写 `prefs.js`，因此 Zotero Bridge 会阻止在 Zotero 正在运行时修改本地 `prefs.js`。
 
 ## 默认路径
 
@@ -134,6 +160,7 @@ apps/
   desktop/              桌面程序，Vue + Tauri
 crates/
   core/                 配置、路径、模型、错误类型
+                        prefs.js 备份、分类、恢复预览与写回
   zotero-api/           Zotero Local API 客户端
   index/                SQLite/FTS5 本地索引
   sync/                 增量同步、标准化、链接刷新
@@ -143,6 +170,7 @@ migrations/             SQLite schema 迁移
 packaging/              发布所需静态模板
 scripts/                本地构建与发布脚本
 .github/workflows/      CI 与 GitHub Release 流水线
+assets/prefs.js         Zotero prefs.js 参考样本，用于解析回归测试
 ```
 
 前端构建：
@@ -163,7 +191,7 @@ cargo test --workspace
 Windows 本地打包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\release.ps1
+powershell -ExecutionPolicy Bypass -File scripts\release-windows.ps1
 ```
 
 macOS 本地打包：
@@ -176,7 +204,7 @@ bash scripts/release-macos.sh
 
 ## 隐私
 
-Zotero Bridge 只在本机保存配置、索引、日志和链接文件。不启动公网服务，不收集遥测，不上传文献库内容。请不要把 `localhost:23119` 转发到局域网或公网。
+Zotero Bridge 只在本机保存配置、索引、日志、链接文件和用户主动导出的设置备份。不启动公网服务，不收集遥测，不上传文献库内容。设置备份会包含并标记疑似敏感项，导出的 JSON 可能包含你的插件偏好、本机路径和账号相关设置，请按个人资料处理。请不要把 `localhost:23119` 转发到局域网或公网。
 
 ## License
 

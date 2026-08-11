@@ -353,12 +353,21 @@ fn regex_replace(input: &str, from: &str, to: &str, global: bool) -> String {
 /// Resolve a bare field name to its string value.
 fn resolve(name: &str, ctx: &Ctx) -> String {
     match name {
-        "title" => data_str(ctx, &["title"]).unwrap_or_else(|| ctx.item.title.clone()),
+        "title" => item_title(ctx),
         "itemType" => data_str(ctx, &["itemType"]).unwrap_or_else(|| ctx.item.item_type.clone()),
-        "date" => data_str(ctx, &["date", "issueDate", "filingDate"])
-            .unwrap_or_else(|| ctx.item.year.clone()),
-        "dateEnacted" => data_str(ctx, &["dateEnacted", "enactmentDate", "date"])
-            .unwrap_or_else(|| ctx.item.year.clone()),
+        "date" => item_date(ctx),
+        "dateEnacted" => data_str(
+            ctx,
+            &[
+                "dateEnacted",
+                "enactmentDate",
+                "dateAdopted",
+                "dateDecided",
+                "effectiveDate",
+                "date",
+            ],
+        )
+        .unwrap_or_else(|| ctx.item.year.clone()),
         "year" => {
             let date = resolve("date", ctx);
             if date.is_empty() {
@@ -372,16 +381,8 @@ fn resolve(name: &str, ctx: &Ctx) -> String {
         "itemKey" | "item_key" => ctx.item.item_key.clone(),
         "creators" => ctx.item.creators.clone(),
         "primaryCreator" | "primary_creator" => ctx.item.primary_creator.clone(),
-        "nameOfAct" => data_str(ctx, &["nameOfAct", "title"]).unwrap_or_else(|| {
-            if ctx.item.title.starts_with("[无标题] -- ") {
-                String::new()
-            } else {
-                ctx.item.title.clone()
-            }
-        }),
-        "publicLawNumber" => {
-            data_str(ctx, &["publicLawNumber", "codeNumber", "number", "code"]).unwrap_or_default()
-        }
+        "nameOfAct" => legal_title(ctx),
+        "publicLawNumber" => legal_number(ctx),
         "containerTitle" | "container_title" | "publicationTitle" => {
             data_str(ctx, &["publicationTitle", "bookTitle", "proceedingsTitle"])
                 .unwrap_or_else(|| ctx.item.container_title.clone())
@@ -390,14 +391,72 @@ fn resolve(name: &str, ctx: &Ctx) -> String {
         "editors" => format_creators(ctx, "editor", &[]),
         "number" => data_str(
             ctx,
-            &["number", "reportNumber", "patentNumber", "caseNumber"],
+            &[
+                "number",
+                "reportNumber",
+                "patentNumber",
+                "caseNumber",
+                "codeNumber",
+                "publicLawNumber",
+                "documentNumber",
+                "lawNumber",
+                "statuteNumber",
+                "regulationNumber",
+                "billNumber",
+                "docketNumber",
+            ],
         )
+        .or_else(|| extra_labeled_value(ctx, &["number", "编号"]))
         .unwrap_or_default(),
+        "patentNumber" => data_str(ctx, &["patentNumber", "number"]).unwrap_or_default(),
         "publisher" => {
             data_str(ctx, &["publisher", "university", "institution"]).unwrap_or_default()
         }
         other => data_str(ctx, &[other]).unwrap_or_default(),
     }
+}
+
+fn item_title(ctx: &Ctx) -> String {
+    data_str(
+        ctx,
+        &[
+            "title",
+            // Zotero statute items do not have `title`; the displayed legal
+            // title is stored in Name of Act.
+            "nameOfAct",
+            "caseName",
+            "billTitle",
+            "subject",
+        ],
+    )
+    .unwrap_or_else(|| ctx.item.title.clone())
+}
+
+fn legal_title(ctx: &Ctx) -> String {
+    data_str(ctx, &["nameOfAct", "title"]).unwrap_or_else(|| {
+        if ctx.item.title.starts_with("[无标题] -- ") {
+            String::new()
+        } else {
+            ctx.item.title.clone()
+        }
+    })
+}
+
+fn item_date(ctx: &Ctx) -> String {
+    data_str(
+        ctx,
+        &[
+            "date",
+            // Type-specific date fields used by legal/patent item types.
+            "dateEnacted",
+            "issueDate",
+            "filingDate",
+            "dateDecided",
+            "dateAdopted",
+            "effectiveDate",
+        ],
+    )
+    .unwrap_or_else(|| ctx.item.year.clone())
 }
 
 /// First non-empty string among candidate keys in the item's data object.
@@ -411,6 +470,61 @@ fn data_str(ctx: &Ctx, keys: &[&str]) -> Option<String> {
             };
             if !s.trim().is_empty() {
                 return Some(s);
+            }
+        }
+    }
+    None
+}
+
+fn legal_number(ctx: &Ctx) -> String {
+    data_str(
+        ctx,
+        &[
+            "publicLawNumber",
+            "codeNumber",
+            "number",
+            "code",
+            "documentNumber",
+            "lawNumber",
+            "statuteNumber",
+            "regulationNumber",
+            "billNumber",
+            "docketNumber",
+        ],
+    )
+    .or_else(|| {
+        extra_labeled_value(
+            ctx,
+            &[
+                "public law number",
+                "code number",
+                "document number",
+                "law number",
+                "statute number",
+                "regulation number",
+                "bill number",
+                "docket number",
+                "number",
+                "编号",
+                "法律编号",
+                "法规编号",
+            ],
+        )
+    })
+    .unwrap_or_default()
+}
+
+fn extra_labeled_value(ctx: &Ctx, labels: &[&str]) -> Option<String> {
+    let extra = data_str(ctx, &["extra"])?;
+    for line in extra.lines() {
+        let Some((label, value)) = line.split_once(':').or_else(|| line.split_once('：')) else {
+            continue;
+        };
+        let label = label.trim().to_ascii_lowercase();
+        if labels.iter().any(|l| label == l.to_ascii_lowercase()) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(value.to_string());
             }
         }
     }
@@ -659,7 +773,7 @@ mod tests {
         );
         // patent: 模板里的 date 取 issueDate（而非 filingDate）
         let patent = item_with_raw(
-            r#"{"key":"K9","version":1,"data":{"itemType":"patent","title":"T","number":"CN113568705B","filingDate":"2021-07-23","issueDate":"2024-03-22","creators":[]}}"#,
+            r#"{"key":"K9","version":1,"data":{"itemType":"patent","title":"T","patentNumber":"CN113568705B","filingDate":"2021-07-23","issueDate":"2024-03-22","creators":[]}}"#,
             "K9",
         );
         assert_eq!(
@@ -672,7 +786,7 @@ mod tests {
         // statute: Zotero legal records may use type-specific fields. Keep the
         // user's Zotero template working even when some fields are absent.
         let statute = item_with_raw(
-            r#"{"key":"K10","version":1,"data":{"itemType":"statute","title":"中华人民共和国民法典","date":"2020-05-28","codeNumber":"主席令第四十五号","creators":[]}}"#,
+            r#"{"key":"K10","version":1,"data":{"itemType":"statute","nameOfAct":"中华人民共和国民法典","dateEnacted":"2020-05-28","codeNumber":"主席令第四十五号","creators":[]}}"#,
             "K10",
         );
         assert_eq!(
@@ -681,6 +795,38 @@ mod tests {
                 &statute
             ),
             "《中华人民共和国民法典》（主席令第四十五号，2020）"
+        );
+        assert_eq!(render("{{title}}", &statute), "中华人民共和国民法典");
+
+        let regulation = item_with_raw(
+            r#"{"key":"K11","version":1,"data":{"itemType":"statute","nameOfAct":"Regulation (EU) 2017/745 (MDR)","dateAdopted":"2017-04-05","documentNumber":"Regulation (EU) 2017/745","creators":[]}}"#,
+            "K11",
+        );
+        assert_eq!(
+            render(
+                r#"《{{nameOfAct replaceFrom='[\\/:?*"<>|]' replaceTo="_" regexOpts="g"}}》（{{if publicLawNumber}}{{publicLawNumber replaceFrom='[\\/:?*"<>|]' replaceTo="_" regexOpts="g"}}，{{endif}}{{if dateEnacted}}{{dateEnacted replaceFrom="[^0-9].*" replaceTo="" regexOpts="g"}}{{endif}}）"#,
+                &regulation
+            ),
+            "《Regulation (EU) 2017_745 (MDR)》（Regulation (EU) 2017_745，2017）"
+        );
+
+        let extra_number = item_with_raw(
+            r#"{"key":"K12","version":1,"data":{"itemType":"statute","nameOfAct":"采用国际标准管理办法","date":"2001-12-04","extra":"编号：国家质量技术监督局令第10号","creators":[]}}"#,
+            "K12",
+        );
+        assert_eq!(
+            render(
+                "《{{nameOfAct}}》（{{if publicLawNumber}}{{publicLawNumber}}，{{endif}}{{if dateEnacted}}{{dateEnacted replaceFrom=\"[^0-9].*\" replaceTo=\"\" regexOpts=\"g\"}}{{endif}}）",
+                &extra_number
+            ),
+            "《采用国际标准管理办法》（国家质量技术监督局令第10号，2001）"
+        );
+        assert_eq!(
+            render(
+                "《{{nameOfAct replaceFrom='[\\\\/:?*\"<>|]' replaceTo=\"_\" regexOpts=\"g\"}}》{{if publicLawNumber}}（{{publicLawNumber}}{{dateEnacted}}）{{endif}}",
+                &extra_number
+            ),
+            "《采用国际标准管理办法》（国家质量技术监督局令第10号2001-12-04）"
         );
     }
 

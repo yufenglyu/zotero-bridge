@@ -6,7 +6,7 @@
 //! All sync, index and file work reuses the shared crates; the frontend
 //! only displays status and edits configuration.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, RwLock};
@@ -73,6 +73,14 @@ struct StatusView {
 #[derive(Serialize)]
 struct PathsView {
     config_dir: String,
+}
+
+#[derive(Deserialize)]
+struct RestorePrefsOptions {
+    #[serde(default)]
+    restore_paths: bool,
+    #[serde(default)]
+    mappings: Vec<zotero_bridge_core::prefs_backup::PathMapping>,
 }
 
 // ---------------------------------------------------------------------
@@ -268,6 +276,140 @@ fn zotero_template() -> Option<String> {
 }
 
 #[tauri::command]
+fn scan_zotero_prefs(
+    path: Option<String>,
+) -> Result<zotero_bridge_core::prefs_backup::PrefsScan, String> {
+    zotero_bridge_core::prefs_backup::scan_from_path(clean_path(path)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn backup_zotero_prefs(
+    path: Option<String>,
+    source_path: Option<String>,
+    prefs: Option<Vec<zotero_bridge_core::prefs_backup::PrefEntry>>,
+) -> Result<String, String> {
+    let out = clean_path(path);
+    let source = clean_path(source_path);
+    let result = if let Some(prefs) = prefs {
+        zotero_bridge_core::prefs_backup::backup_entries_from(source, out, prefs)
+    } else {
+        zotero_bridge_core::prefs_backup::backup_current_from(source, out)
+    };
+    result
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_zotero_prefs_backup(
+    path: String,
+) -> Result<zotero_bridge_core::prefs_backup::PrefsBackup, String> {
+    zotero_bridge_core::prefs_backup::load_backup(PathBuf::from(path).as_path())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn preview_restore_zotero_prefs(
+    path: String,
+    options: RestorePrefsOptions,
+    prefs: Option<Vec<zotero_bridge_core::prefs_backup::PrefEntry>>,
+    target_path: Option<String>,
+) -> Result<zotero_bridge_core::prefs_backup::RestorePreview, String> {
+    let target = clean_path(target_path);
+    let opts = zotero_bridge_core::prefs_backup::RestoreOptions {
+        restore_paths: options.restore_paths,
+        mappings: options.mappings,
+    };
+    if let Some(prefs) = prefs {
+        zotero_bridge_core::prefs_backup::preview_restore_entries_to(
+            target,
+            "已编辑设置项",
+            prefs,
+            &opts,
+        )
+        .map_err(|e| e.to_string())
+    } else {
+        zotero_bridge_core::prefs_backup::preview_restore_to(
+            target,
+            PathBuf::from(path).as_path(),
+            &opts,
+        )
+        .map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn restore_zotero_prefs(
+    path: String,
+    options: RestorePrefsOptions,
+    prefs: Option<Vec<zotero_bridge_core::prefs_backup::PrefEntry>>,
+    target_path: Option<String>,
+) -> Result<zotero_bridge_core::prefs_backup::RestoreReport, String> {
+    if zotero_is_running() {
+        return Err("检测到 Zotero 正在运行。请先关闭 Zotero，再应用恢复。".into());
+    }
+    let target = clean_path(target_path);
+    let opts = zotero_bridge_core::prefs_backup::RestoreOptions {
+        restore_paths: options.restore_paths,
+        mappings: options.mappings,
+    };
+    if let Some(prefs) = prefs {
+        zotero_bridge_core::prefs_backup::apply_restore_entries_to(target, prefs, &opts)
+            .map_err(|e| e.to_string())
+    } else {
+        zotero_bridge_core::prefs_backup::apply_restore_to(
+            target,
+            PathBuf::from(path).as_path(),
+            &opts,
+        )
+        .map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn save_zotero_prefs(
+    path: Option<String>,
+    prefs: Vec<zotero_bridge_core::prefs_backup::PrefEntry>,
+) -> Result<zotero_bridge_core::prefs_backup::RestoreReport, String> {
+    if zotero_is_running() {
+        return Err("检测到 Zotero 正在运行。请先关闭 Zotero，再写回设置。".into());
+    }
+    zotero_bridge_core::prefs_backup::save_current_entries(clean_path(path), prefs)
+        .map_err(|e| e.to_string())
+}
+
+fn clean_path(path: Option<String>) -> Option<PathBuf> {
+    path.filter(|p| !p.trim().is_empty()).map(PathBuf::from)
+}
+
+#[cfg(windows)]
+fn zotero_is_running() -> bool {
+    std::process::Command::new("tasklist")
+        .args(["/FI", "IMAGENAME eq zotero.exe"])
+        .output()
+        .map(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .to_ascii_lowercase()
+                .contains("zotero.exe")
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn zotero_is_running() -> bool {
+    std::process::Command::new("pgrep")
+        .args(["-x", "Zotero"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+fn zotero_is_running() -> bool {
+    false
+}
+
+#[tauri::command]
 fn refresh_links(state: State<'_, AppState>) -> Result<String, String> {
     let cfg = state.config.read().unwrap().clone();
     let mut db = Database::open(&state.db_path).map_err(|e| e.to_string())?;
@@ -309,6 +451,35 @@ fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), String> {
     };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     open_folder(&dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn browse_backup_file(default_dir: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new()
+        .add_filter("Zotero Bridge 设置备份", &["json"])
+        .set_file_name("zotero-bridge-prefs-backup.json");
+    if let Some(dir) = dialog_start_dir(default_dir) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.save_file().map(|p| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn browse_restore_file(default_dir: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new().add_filter("Zotero Bridge 设置备份", &["json"]);
+    if let Some(dir) = dialog_start_dir(default_dir) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.pick_file().map(|p| p.to_string_lossy().into_owned())
+}
+
+fn dialog_start_dir(path: Option<String>) -> Option<PathBuf> {
+    let path = clean_path(path)?;
+    if path.is_dir() {
+        Some(path)
+    } else {
+        path.parent().map(PathBuf::from)
+    }
 }
 
 #[cfg(windows)]
@@ -519,7 +690,15 @@ fn main() {
             rebuild_index,
             refresh_links,
             zotero_template,
+            scan_zotero_prefs,
+            backup_zotero_prefs,
+            load_zotero_prefs_backup,
+            preview_restore_zotero_prefs,
+            restore_zotero_prefs,
+            save_zotero_prefs,
             open_dir,
+            browse_backup_file,
+            browse_restore_file,
             doctor,
         ])
         .setup(|app| {

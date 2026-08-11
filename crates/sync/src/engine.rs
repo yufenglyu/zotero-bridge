@@ -24,7 +24,9 @@ const UNSTABLE_BACKOFF_MS: u64 = 500;
 /// against the persisted value forces one full sync.
 /// 1 → initial; 2 → ItemData flatten map started preserving every field;
 /// 3 → legal items can derive display titles from type-specific fields.
-const NORMALIZER_VERSION: &str = "3";
+/// 4 → legal filename fields gained extra aliases and fallbacks.
+/// 5 → Zotero 10 field aliases for legal and patent filename templates.
+const NORMALIZER_VERSION: &str = "5";
 
 pub struct SyncEngine<'a, S: ZoteroSource> {
     source: &'a S,
@@ -403,14 +405,12 @@ enum FetchOutcome {
 
 /// Platforms with mirroring enabled in the configuration.
 pub fn enabled_platforms(config: &Config) -> Vec<Platform> {
-    let mut out = Vec::new();
-    if config.mirror.windows.enabled {
-        out.push(Platform::Windows);
+    let current = Platform::current();
+    if config.mirror_for(current).enabled {
+        vec![current]
+    } else {
+        Vec::new()
     }
-    if config.mirror.macos.enabled {
-        out.push(Platform::Macos);
-    }
-    out
 }
 
 /// Plan mirror jobs for one sync batch (spec section 13). Also stamps
@@ -699,10 +699,42 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
             report.deleted += 1;
         }
     }
+    cleanup_inactive_same_dir_artifacts(config, &platforms, &mut report)?;
     if !cleanup_jobs.is_empty() {
         db.enqueue_jobs(&cleanup_jobs)?;
     }
     Ok(report)
+}
+
+fn cleanup_inactive_same_dir_artifacts(
+    config: &Config,
+    active: &[Platform],
+    report: &mut MirrorRefreshReport,
+) -> Result<()> {
+    let current = Platform::current();
+    if !active.contains(&current) {
+        return Ok(());
+    }
+    let current_dir = config.mirror_dir(current);
+    for platform in [Platform::Windows, Platform::Macos] {
+        if platform == current || active.contains(&platform) {
+            continue;
+        }
+        let dir = config.mirror_dir(platform);
+        if dir != current_dir || !dir.exists() {
+            continue;
+        }
+        let ext = backend_for(platform).extension();
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some(ext) {
+                fs::remove_file(path)?;
+                report.deleted += 1;
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn inspect_mirror_directories(
@@ -933,6 +965,20 @@ mod tests {
     }
 
     #[test]
+    fn enabled_platforms_only_uses_current_os() {
+        let mut cfg = Config::default();
+        cfg.mirror.windows.enabled = true;
+        cfg.mirror.macos.enabled = true;
+        assert_eq!(enabled_platforms(&cfg), vec![Platform::current()]);
+
+        match Platform::current() {
+            Platform::Windows => cfg.mirror.windows.enabled = false,
+            Platform::Macos => cfg.mirror.macos.enabled = false,
+        }
+        assert!(enabled_platforms(&cfg).is_empty());
+    }
+
+    #[test]
     fn zotero_template_collisions_get_key_suffix() {
         let mut cfg = test_config();
         cfg.mirror.windows.template = "【{{authors}}】{{title}}".into();
@@ -1049,6 +1095,36 @@ mod tests {
         assert_eq!(report.deleted, 1);
         zotero_bridge_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
         assert!(!dir.join("orphan.url").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refresh_removes_inactive_platform_files_when_directory_is_shared() {
+        let dir = std::env::temp_dir().join(format!("zotero-bridge-cross-platform-{}", uuid_v4()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut cfg = Config::default();
+        cfg.mirror.windows.enabled = true;
+        cfg.mirror.windows.directory = dir.to_string_lossy().into_owned();
+        cfg.mirror.windows.template = TEST_TEMPLATE.into();
+        cfg.mirror.macos.enabled = true;
+        cfg.mirror.macos.directory = dir.to_string_lossy().into_owned();
+        cfg.mirror.macos.template = TEST_TEMPLATE.into();
+
+        let stale_platform = match Platform::current() {
+            Platform::Windows => Platform::Macos,
+            Platform::Macos => Platform::Windows,
+        };
+        let ext = backend_for(stale_platform).extension();
+        let stale = dir.join(format!("stale.{ext}"));
+        std::fs::write(&stale, "stale").unwrap();
+
+        let mut db = Database::open_in_memory().unwrap();
+        let report = refresh_mirrors(&mut db, &cfg).unwrap();
+        assert_eq!(report.deleted, 1);
+        assert!(!stale.exists());
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

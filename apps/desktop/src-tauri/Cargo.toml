@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-autostart = "2"
+rfd = "0.15"
 zotero-bridge-core = { path = "../../../crates/core" }
 zotero-bridge-zotero-api = { path = "../../../crates/zotero-api" }
 zotero-bridge-index = { path = "../../../crates/index" }

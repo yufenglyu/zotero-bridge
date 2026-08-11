@@ -5,6 +5,7 @@ pub mod config;
 pub mod errors;
 pub mod models;
 pub mod paths;
+pub mod prefs_backup;
 pub mod timeutil;
 pub mod zotero_prefs;
 
