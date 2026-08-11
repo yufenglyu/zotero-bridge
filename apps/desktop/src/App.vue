@@ -793,52 +793,85 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="metric-grid">
-          <article class="metric">
-            <span>已索引条目</span>
-            <strong>{{ status.item_count.toLocaleString() }}</strong>
-            <small>排除附件、笔记、批注</small>
-          </article>
-          <article class="metric">
-            <span>文献库</span>
-            <strong>{{ status.library_count }}</strong>
-            <small>个人库 + 群组库</small>
-          </article>
-          <article class="metric">
-            <span>待写入链接</span>
-            <strong>{{ status.pending_jobs }}</strong>
-            <small>快捷目录任务队列</small>
-          </article>
-          <article class="metric" :class="{ danger: status.failed_jobs > 0 }">
-            <span>失败任务</span>
-            <strong>{{ status.failed_jobs }}</strong>
-            <small>多次重试仍失败</small>
-          </article>
-        </div>
-
         <div class="content-grid">
           <section class="panel span-12">
             <div class="panel-head">
               <div>
-                <h3>文献库</h3>
-                <p>每个 Zotero 库独立记录版本和启用状态。</p>
+                <h3>运行概览</h3>
+                <p>集中查看 Zotero 实例、文献库、链接文件和本地任务状态。</p>
               </div>
             </div>
-            <div class="library-table">
-              <div
-                v-for="lib in status.libraries"
-                :key="lib.kind + lib.zotero_library_id"
-                class="library-row"
-              >
-                <span class="tag">{{ lib.kind }}</span>
-                <strong>{{ lib.display_name }}</strong>
-                <em>id={{ lib.zotero_library_id }}</em>
-                <em>版本 {{ lib.last_version }}</em>
-                <span class="state" :class="{ off: !lib.enabled }">
-                  {{ lib.enabled ? "启用" : "停用" }}
-                </span>
-                <p v-if="lib.last_error">{{ lib.last_error }}</p>
+            <div class="overview-grid">
+              <div class="overview-card">
+                <span>已索引条目</span>
+                <strong>{{ status.item_count.toLocaleString() }}</strong>
+                <small>最近同步 {{ fmtTime(status.last_sync_at) }}</small>
               </div>
+              <div class="overview-card">
+                <span>链接文件</span>
+                <strong v-if="currentMirrorDirectory">
+                  {{ currentMirrorDirectory.actual_files.toLocaleString() }} / {{ currentMirrorDirectory.expected_files.toLocaleString() }}
+                </strong>
+                <strong v-else>未配置</strong>
+                <small v-if="currentMirrorDirectory">
+                  {{ currentMirrorIssueCount === 0 ? "正常" : `${currentMirrorIssueCount} 项异常` }} · 更新 {{ fmtTime(currentMirrorDirectory.latest_modified_at) }}
+                </small>
+                <small v-else>未生成链接目录</small>
+              </div>
+              <div class="overview-card">
+                <span>Zotero 实例</span>
+                <strong>{{ status.instance || "未知" }}</strong>
+                <small>{{ status.library_count }} 个文献库 · 排除附件、笔记、批注</small>
+              </div>
+            </div>
+            <section class="overview-block">
+              <h4>文献库状态</h4>
+              <div class="library-table compact-library-table">
+                <div
+                  v-for="lib in status.libraries"
+                  :key="lib.kind + lib.zotero_library_id"
+                  class="library-row compact-library-row"
+                >
+                  <span class="tag">{{ lib.kind }}</span>
+                  <strong>{{ lib.display_name }}</strong>
+                  <em>id={{ lib.zotero_library_id }}</em>
+                  <em>版本 {{ lib.last_version }}</em>
+                  <span class="state" :class="{ off: !lib.enabled }">
+                    {{ lib.enabled ? "启用" : "停用" }}
+                  </span>
+                  <p v-if="lib.last_error">{{ lib.last_error }}</p>
+                </div>
+              </div>
+            </section>
+            <div class="queue-strip">
+              <span>任务队列</span>
+              <strong>待写入 {{ status.pending_jobs.toLocaleString() }}</strong>
+              <strong :class="{ warn: status.failed_jobs > 0 }">失败 {{ status.failed_jobs.toLocaleString() }}</strong>
+            </div>
+            <div class="toolbar">
+              <button
+                class="primary"
+                :disabled="busy"
+                title="立即向 Zotero Local API 拉取变化，更新本地索引，并把本轮变化对应的链接文件写入、改名或删除。"
+                @click="syncNow"
+              >
+                <RefreshCw class="icon" />立即同步
+              </button>
+              <button :disabled="busy" @click="togglePause">
+                <Play v-if="status.paused" class="icon" />
+                <Pause v-else class="icon" />
+                {{ status.paused ? "恢复同步" : "暂停同步" }}
+              </button>
+              <button
+                :disabled="busy"
+                title="不重新拉取 Zotero 数据，只按当前索引、命名模板和 URI 模板重算链接文件；会补写缺失文件、覆盖内容变化的文件、改名已重命名文献对应的文件。"
+                @click="refreshLinks"
+              >
+                <Link class="icon" />刷新链接
+              </button>
+              <button class="danger" :disabled="busy" @click="rebuildIndex">
+                <RotateCcw class="icon" />重建索引
+              </button>
             </div>
           </section>
 
@@ -846,17 +879,11 @@ onUnmounted(() => {
             <div class="panel-head">
               <div>
                 <h3><Link class="icon" />链接文件</h3>
-                <p>检查本地链接文件状态，并配置当前系统的链接目录、命名模板和 URI 模板。</p>
+                <p>配置当前系统的链接文件目录、命名模板和 URI 模板；文件数量与任务状态在运行概览中查看。</p>
               </div>
             </div>
             <div v-if="currentMirrorDirectory" class="mirror-table">
-              <div
-                class="mirror-row"
-                :class="{
-                  stale:
-                    currentMirrorIssueCount > 0,
-                }"
-              >
+              <div class="mirror-row mirror-directory-row">
                 <div class="mirror-directory">
                   <strong>目录设置</strong>
                   <input
@@ -870,18 +897,6 @@ onUnmounted(() => {
                   <button type="button" class="compact-icon" title="打开链接文件目录" @click="openDir('mirror')">
                     <FolderOpen class="icon" />
                   </button>
-                </div>
-                <div class="mirror-health">
-                  <div class="mirror-stats">
-                    <strong>{{ currentMirrorDirectory.actual_files.toLocaleString() }} / {{ currentMirrorDirectory.expected_files.toLocaleString() }}</strong>
-                    <span>本地文件 / 应有文件</span>
-                  </div>
-                  <div class="mirror-time">
-                    <strong :class="{ warn: currentMirrorIssueCount > 0 }">
-                      {{ currentMirrorIssueCount === 0 ? "正常" : `${currentMirrorIssueCount} 项异常` }}
-                    </strong>
-                    <span>最近更新 {{ fmtTime(currentMirrorDirectory.latest_modified_at) }}</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -918,57 +933,16 @@ onUnmounted(() => {
             </div>
           </section>
 
-          <section class="panel span-12">
-            <div class="panel-head">
-              <div>
-                <h3>同步状态</h3>
-                <p>绑定 Zotero 实例并持续刷新本地索引。</p>
-              </div>
-            </div>
-            <dl class="facts">
-              <div>
-                <dt>当前实例</dt>
-                <dd>{{ status.instance || "未知" }}</dd>
-              </div>
-              <div>
-                <dt>最近同步</dt>
-                <dd>{{ fmtTime(status.last_sync_at) }}</dd>
-              </div>
-            </dl>
-            <div class="toolbar">
-              <button
-                class="primary"
-                :disabled="busy"
-                title="立即向 Zotero Local API 拉取变化，更新本地索引，并把本轮变化对应的链接文件写入、改名或删除。"
-                @click="syncNow"
-              >
-                <RefreshCw class="icon" />立即同步
-              </button>
-              <button :disabled="busy" @click="togglePause">
-                <Play v-if="status.paused" class="icon" />
-                <Pause v-else class="icon" />
-                {{ status.paused ? "恢复同步" : "暂停同步" }}
-              </button>
-              <button
-                :disabled="busy"
-                title="不重新拉取 Zotero 数据，只按当前索引、命名模板和 URI 模板重算链接文件；会补写缺失文件、覆盖内容变化的文件、改名已重命名文献对应的文件。"
-                @click="refreshLinks"
-              >
-                <Link class="icon" />刷新链接
-              </button>
-              <button class="danger" :disabled="busy" @click="rebuildIndex">
-                <RotateCcw class="icon" />重建索引
-              </button>
-            </div>
-          </section>
         </div>
       </section>
 
       <section v-if="tab === 'backup'" class="page">
-        <div class="page-title">
-          <span class="eyebrow">Preferences Backup</span>
-          <h2>设置备份与迁移</h2>
-          <p>备份 Zotero 本身和插件写入 prefs.js 的设置项；恢复前可预览变化并映射路径。</p>
+        <div class="hero">
+          <div>
+            <span class="eyebrow">Preferences Backup</span>
+            <h2>设置备份与迁移</h2>
+            <p>备份 Zotero 本身和插件写入 prefs.js 的设置项；恢复前可预览变化并映射路径。</p>
+          </div>
         </div>
 
         <section class="panel settings-card">
