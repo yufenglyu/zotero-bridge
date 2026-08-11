@@ -50,7 +50,12 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
 
   echo "==> Building macOS universal app"
   TAURI_ARGS=(build --target universal-apple-darwin --bundles app,dmg --ci)
-  if [[ "$SIGN" -eq 0 ]]; then
+  if [[ "$SIGN" -eq 1 ]]; then
+    if [[ -z "${APPLE_CERTIFICATE:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" || -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+      echo "==> macOS signing secrets are incomplete; building without code signing"
+      TAURI_ARGS+=(--no-sign)
+    fi
+  else
     TAURI_ARGS+=(--no-sign)
   fi
   (cd apps/desktop && npm run tauri -- "${TAURI_ARGS[@]}")
