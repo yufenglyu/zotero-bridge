@@ -1,12 +1,12 @@
 [package]
-name = "zsb-zotero-api"
+name = "zotero-bridge-zotero-api"
 description = "Zotero Local API client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-zsb-core = { path = "../core" }
+zotero-bridge-core = { path = "../core" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -1,4 +1,4 @@
-//! zsb-sync: incremental synchronization engine (spec section 12).
+//! zotero-bridge-sync: incremental synchronization engine (spec section 12).
 //!
 //! Flow: probe instance -> discover libraries -> fetch changed versions
 //! -> batch-fetch items (max 50 keys) -> fetch deleted keys -> verify

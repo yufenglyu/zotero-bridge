@@ -1,4 +1,4 @@
-//! zsb-zotero-api: read-only client for the Zotero Local API
+//! zotero-bridge-zotero-api: read-only client for the Zotero Local API
 //! (http://localhost:23119/api).
 //!
 //! Only read requests are used. The API requires Zotero to be running and

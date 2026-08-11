@@ -3,7 +3,7 @@
 use crate::dto::{DeletedResponse, VersionsResponse, ZoteroGroup, ZoteroItem};
 use crate::source::{DeletedObjects, ItemResponse, VersionResponse, ZoteroSource};
 use std::time::Duration;
-use zsb_core::{Error, RemoteLibrary, Result, ServerInfo};
+use zotero_bridge_core::{Error, RemoteLibrary, Result, ServerInfo};
 
 /// Maximum number of item keys per batch request (spec section 12.1).
 pub const BATCH_SIZE: usize = 50;

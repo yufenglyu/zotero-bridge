@@ -1,13 +1,13 @@
 [package]
-name = "zsb-mirror"
+name = "zotero-bridge-mirror"
 description = "Filesystem mirror manager (.url / .webloc) for Zotero Bridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-zsb-core = { path = "../core" }
-zsb-index = { path = "../index" }
+zotero-bridge-core = { path = "../core" }
+zotero-bridge-index = { path = "../index" }
 thiserror.workspace = true
 tracing.workspace = true
 regex.workspace = true

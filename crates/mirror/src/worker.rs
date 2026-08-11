@@ -8,8 +8,8 @@
 use std::fs;
 use std::path::Path;
 use tracing::{debug, warn};
-use zsb_core::{Error, MirrorJob, MirrorOperation, Platform, Result};
-use zsb_index::Database;
+use zotero_bridge_core::{Error, MirrorJob, MirrorOperation, Platform, Result};
+use zotero_bridge_index::Database;
 
 /// Maximum retries before a job is marked permanently failed.
 pub const MAX_RETRIES: u32 = 8;
@@ -88,7 +88,11 @@ fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension(format!("zsb-{}-{}.tmp", std::process::id(), now_millis()));
+    let tmp = path.with_extension(format!(
+        "zotero-bridge-{}-{}.tmp",
+        std::process::id(),
+        now_millis()
+    ));
     fs::write(&tmp, content)?;
     if path.exists() {
         // Windows cannot rename over an existing file.
@@ -116,11 +120,13 @@ fn now_millis() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zsb_core::{NewMirrorJob, SyncBatch};
+    use zotero_bridge_core::{NewMirrorJob, SyncBatch};
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("zsb-mirror-test-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "zotero-bridge-mirror-test-{tag}-{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -178,20 +184,20 @@ mod tests {
         // a "crash" before processing leaves them pending (spec 8.4).
         let dir = temp_dir("outbox");
         let mut db = Database::open_in_memory().unwrap();
-        db.upsert_instance(&zsb_core::ServerInfo {
+        db.upsert_instance(&zotero_bridge_core::ServerInfo {
             api_base: "http://localhost:23119/api".into(),
             api_version: Some(3),
             schema_version: None,
             server_id: "srv".into(),
         })
         .unwrap();
-        let lib = zsb_core::RemoteLibrary::user();
+        let lib = zotero_bridge_core::RemoteLibrary::user();
         let lib_id = db.upsert_library("srv", &lib).unwrap();
         let path = dir.join("a -- K9.url");
         db.apply_sync_batch(
             lib_id,
             &SyncBatch {
-                upserts: vec![zsb_core::IndexedItem {
+                upserts: vec![zotero_bridge_core::IndexedItem {
                     item_key: "K9".into(),
                     item_version: 1,
                     item_type: "book".into(),

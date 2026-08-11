@@ -1,6 +1,6 @@
 # 故障诊断指南
 
-先运行 `zotero-bridge doctor`（或桌面程序的“诊断”页），按下表对照处理。
+先运行桌面程序的“诊断”页，按下表对照处理。
 
 ## Zotero 连接类
 
@@ -15,18 +15,18 @@
 
 | 现象 | 原因与处理 |
 | --- | --- |
-| 搜不到刚添加的文献 | 默认 15 秒轮询；运行 `zotero-bridge sync` 或托盘“立即同步”。 |
+| 搜不到刚添加的文献 | 默认 15 秒轮询；点击状态页“立即同步”。 |
 | 单字/两字搜索无结果但长词有 | 1–2 字符走 LIKE 回退，仅匹配标题/作者/标签；属设计行为。 |
-| 结果异常或怀疑索引损坏 | `zotero-bridge verify-index` → 失败则 `zotero-bridge rebuild`。 |
-| 搜索完全不可用 | 删除 `%LOCALAPPDATA%\ZoteroSearchBridge\data\index.sqlite` 后 `zotero-bridge sync` 重建（启动时 `PRAGMA quick_check` 失败的损坏库会自动备份为 `*.corrupt-*`）。 |
+| 结果异常或怀疑索引损坏 | 点击状态页“重建索引”。 |
+| 搜索完全不可用 | 删除 `%LOCALAPPDATA%\ZoteroBridge\data\index.sqlite` 后重启桌面程序并立即同步（启动时 `PRAGMA quick_check` 失败的损坏库会自动备份为 `*.corrupt-*`）。 |
 
 ## 镜像文件类（Listary）
 
 | 现象 | 原因与处理 |
 | --- | --- |
-| Listary 搜不到 `.url` | 确认镜像目录已加入 Listary 索引：`zotero-bridge status` 查看待执行任务；`zotero-bridge doctor` 检查目录可写。 |
-| 托盘显示“失败任务” | 文件被杀软/同步盘占用。关闭占用程序后 `zotero-bridge sync` 会重试 pending 任务。 |
-| 残留旧文件 | `zotero-bridge clean-mirrors` 删除索引中不存在的镜像文件。 |
+| Listary 搜不到 `.url` | 确认链接文件目录已加入 Listary 索引；诊断页可检查目录可写。 |
+| 托盘显示“失败任务” | 文件被杀软/同步盘占用。关闭占用程序后点击“立即同步”会重试 pending 任务。 |
+| 残留旧文件 | 点击状态页“刷新链接”，程序会删除索引中不存在的链接文件。 |
 | 改名后新旧文件同时存在 | 重命名是“先建后删”；旧文件删除失败会进入重试队列，重试期间两个文件可能短暂共存。 |
 
 ## 桌面程序类
@@ -39,8 +39,8 @@
 
 ## 日志
 
-- 桌面程序：`%LOCALAPPDATA%\ZoteroSearchBridge\logs\zotero-bridge.log`
-- CLI：设 `RUST_LOG=info` 环境变量后运行，日志输出到 stderr。
+- Windows：`%LOCALAPPDATA%\ZoteroBridge\logs\zotero-bridge.log`
+- macOS：`~/Library/Logs/ZoteroBridge/zotero-bridge.log`
 
 日志默认只记录库 ID、条目数量、item key 与同步版本，不含标题、摘要
 等文献内容（spec 20.1）。

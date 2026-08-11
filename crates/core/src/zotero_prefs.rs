@@ -3,7 +3,7 @@
 //! Zotero (Preferences → Advanced → attachment rename template).
 //!
 //! Resolution order for the mirror filename template:
-//! 1. A custom template configured in zsb (non-empty and different from
+//! 1. A custom template configured in Zotero Bridge (non-empty and different from
 //!    the built-in legacy default).
 //! 2. Zotero's `extensions.zotero.attachmentRenameTemplate` pref.
 //! 3. The built-in legacy default.

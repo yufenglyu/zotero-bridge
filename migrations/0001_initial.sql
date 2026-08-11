@@ -1,5 +1,5 @@
 -- 0001_initial.sql
--- Core tables for Zotero Search Bridge (spec section 8).
+-- Core tables for Zotero Bridge.
 
 CREATE TABLE zotero_instances (
     server_id       TEXT PRIMARY KEY,

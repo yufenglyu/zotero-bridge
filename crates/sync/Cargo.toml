@@ -1,15 +1,15 @@
 [package]
-name = "zsb-sync"
+name = "zotero-bridge-sync"
 description = "Incremental sync engine from Zotero Local API to the local index"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-zsb-core = { path = "../core" }
-zsb-zotero-api = { path = "../zotero-api" }
-zsb-index = { path = "../index" }
-zsb-mirror = { path = "../mirror" }
+zotero-bridge-core = { path = "../core" }
+zotero-bridge-zotero-api = { path = "../zotero-api" }
+zotero-bridge-index = { path = "../index" }
+zotero-bridge-mirror = { path = "../mirror" }
 serde_json.workspace = true
 sha2.workspace = true
 regex.workspace = true

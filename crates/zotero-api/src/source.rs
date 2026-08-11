@@ -6,7 +6,7 @@
 
 use crate::dto::{DeletedResponse, ZoteroItem};
 use std::future::Future;
-use zsb_core::{RemoteLibrary, Result, ServerInfo, VersionMap};
+use zotero_bridge_core::{RemoteLibrary, Result, ServerInfo, VersionMap};
 
 /// Versions of changed items plus the library version that produced them.
 #[derive(Debug, Clone, Default)]

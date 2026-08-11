@@ -3,11 +3,6 @@
 ## 本地构建
 
 ```sh
-# CLI
-cargo build --release
-# → target/release/zotero-bridge(.exe)
-
-# 桌面程序 + 安装包
 cd apps/desktop
 npm ci
 npx tauri build
@@ -18,6 +13,18 @@ npx tauri build
 #   target/release/bundle/dmg/*.dmg
 ```
 
+Windows 本地发布产物：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1
+```
+
+macOS 本地发布产物：
+
+```sh
+bash scripts/release-macos.sh
+```
+
 NSIS 安装器按当前用户安装（`installMode: currentUser`），无需管理员
 权限；WebView2 采用 `embedBootstrapper` 随包分发。
 
@@ -26,10 +33,11 @@ NSIS 安装器按当前用户安装（`installMode: currentUser`），无需管�
 - `.github/workflows/ci.yml`：push/PR 时在 Windows 与 macOS 上执行
   `cargo fmt --check`、`cargo clippy -D warnings`、`cargo test --workspace`，
   并单独构建前端。
-- `.github/workflows/release.yml`：推送 `v*` 标签时构建 Windows 便携 zip、
-  Windows 桌面安装包（NSIS/MSI）、macOS 通用应用（DMG/app zip）和 macOS
-  CLI zip，并按 `CHANGELOG.md` 中对应版本章节发布正式 GitHub Release。
-  便携 zip 由 `scripts/release.ps1` 生成，最终只上传 `target/dist/` 下的成品。
+- `.github/workflows/release.yml`：推送 `v*` 标签时构建 Windows zip、
+  Windows 桌面安装包（NSIS/MSI）和 macOS 通用应用（DMG/app zip），
+  并按 `CHANGELOG.md` 中对应版本章节发布正式 GitHub Release。
+  Windows zip 由 `scripts/release.ps1` 生成，macOS 产物由
+  `scripts/release-macos.sh` 生成，最终只上传 `target/dist/` 下的成品。
 
 ## Windows 签名
 
@@ -40,7 +48,7 @@ NSIS 安装器按当前用户安装（`installMode: currentUser`），无需管�
    ```powershell
    signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
      /f "$env:CERT_PFX" /p "$env:CERT_PASSWORD" `
-     "target/release/zotero-bridge-desktop.exe" "target/release/bundle/nsis/*-setup.exe" "target/release/bundle/msi/*.msi"
+     "target/release/zotero-bridge.exe" "target/release/bundle/nsis/*-setup.exe" "target/release/bundle/msi/*.msi"
    ```
    PFX 以 base64 存入仓库 secret，运行时解码到临时文件。
 2. **Azure Trusted Signing**：Tauri 2 支持通过
@@ -72,7 +80,7 @@ NSIS 安装器按当前用户安装（`installMode: currentUser`），无需管�
 
 ## 发布检查单
 
-- [x] `cargo test --workspace` 全绿（57 项）
+- [x] `cargo test --workspace` 全绿
 - [x] `cargo clippy --workspace --all-targets -D warnings` 无警告
 - [x] Windows NSIS/MSI 安装包可构建
 - [ ] 安装包在干净 Windows 机器上完成安装→首次同步→搜索验收

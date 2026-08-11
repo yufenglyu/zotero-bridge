@@ -9,7 +9,7 @@
 //! - ranking uses BM25 with the weights from spec section 9.4.
 
 use rusqlite::{params_from_iter, Connection, ToSql};
-use zsb_core::{Error, FieldScope, Result, SearchQuery, SearchResult, Term};
+use zotero_bridge_core::{Error, FieldScope, Result, SearchQuery, SearchResult, Term};
 
 const BM25_WEIGHTS: &str = "10.0, 6.0, 4.0, 3.0, 2.5, 2.0, 0.5, 0.5";
 
@@ -252,8 +252,8 @@ pub fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<SearchResult
             let kind: String = row.get(1)?;
             Ok(SearchResult {
                 item_key: row.get(0)?,
-                library_kind: zsb_core::LibraryKind::parse(&kind)
-                    .unwrap_or(zsb_core::LibraryKind::User),
+                library_kind: zotero_bridge_core::LibraryKind::parse(&kind)
+                    .unwrap_or(zotero_bridge_core::LibraryKind::User),
                 zotero_library_id: row.get(2)?,
                 display_name: row.get(3)?,
                 title: row.get(4)?,
@@ -275,8 +275,8 @@ pub fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<SearchResult
 mod tests {
     use super::*;
     use crate::database::Database;
-    use zsb_core::models::*;
-    use zsb_core::RemoteLibrary;
+    use zotero_bridge_core::models::*;
+    use zotero_bridge_core::RemoteLibrary;
 
     fn fixture_db() -> Database {
         let db = Database::open_in_memory().unwrap();

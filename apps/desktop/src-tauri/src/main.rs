@@ -14,10 +14,10 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State};
 use tracing::{info, warn};
-use zsb_core::{Config, Platform};
-use zsb_index::Database;
-use zsb_sync::SyncEngine;
-use zsb_zotero_api::LocalApiClient;
+use zotero_bridge_core::{Config, Platform};
+use zotero_bridge_index::Database;
+use zotero_bridge_sync::SyncEngine;
+use zotero_bridge_zotero_api::LocalApiClient;
 
 struct AppState {
     config_path: PathBuf,
@@ -70,25 +70,33 @@ struct StatusView {
     mirror_directories: Vec<MirrorDirectoryView>,
 }
 
+#[derive(Serialize)]
+struct PathsView {
+    config_dir: String,
+}
+
 // ---------------------------------------------------------------------
 // Sync helpers
 // ---------------------------------------------------------------------
 
 /// `Send`-safe wrapper: rusqlite connections are `!Sync`, so the engine
 /// runs on a dedicated blocking thread with its own current-thread runtime.
-async fn sync_once_send(config: Config, db_path: PathBuf) -> zsb_core::Result<String> {
+async fn sync_once_send(config: Config, db_path: PathBuf) -> zotero_bridge_core::Result<String> {
     tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(zsb_core::Error::Io)?;
+            .map_err(zotero_bridge_core::Error::Io)?;
         rt.block_on(sync_once(&config, &db_path))
     })
     .await
-    .map_err(|e| zsb_core::Error::Config(format!("sync worker join: {e}")))?
+    .map_err(|e| zotero_bridge_core::Error::Config(format!("sync worker join: {e}")))?
 }
 
-async fn sync_once(config: &Config, db_path: &std::path::Path) -> zsb_core::Result<String> {
+async fn sync_once(
+    config: &Config,
+    db_path: &std::path::Path,
+) -> zotero_bridge_core::Result<String> {
     let client = LocalApiClient::new(
         &config.zotero.api_base,
         config.zotero.request_timeout_seconds,
@@ -100,10 +108,10 @@ async fn sync_once(config: &Config, db_path: &std::path::Path) -> zsb_core::Resu
     };
 
     let mut mirror_summary = String::new();
-    for platform in zsb_sync::engine::enabled_platforms(config) {
-        let mut total = zsb_mirror::worker::WorkerReport::default();
+    for platform in zotero_bridge_sync::engine::enabled_platforms(config) {
+        let mut total = zotero_bridge_mirror::worker::WorkerReport::default();
         for _ in 0..20 {
-            let batch = zsb_mirror::worker::process_pending(&db, platform, 1000)?;
+            let batch = zotero_bridge_mirror::worker::process_pending(&db, platform, 1000)?;
             total.completed += batch.completed;
             total.retried += batch.retried;
             total.failed += batch.failed;
@@ -156,7 +164,7 @@ async fn get_status(state: State<'_, AppState>) -> Result<StatusView, String> {
         .collect();
     let instance = db.active_instance_id().ok().flatten().unwrap_or_default();
     let cfg = state.config.read().unwrap().clone();
-    let mirror_directories = zsb_sync::inspect_mirror_directories(&db, &cfg)
+    let mirror_directories = zotero_bridge_sync::inspect_mirror_directories(&db, &cfg)
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|m| MirrorDirectoryView {
@@ -177,7 +185,7 @@ async fn get_status(state: State<'_, AppState>) -> Result<StatusView, String> {
     let zotero_running = {
         match LocalApiClient::new(&cfg.zotero.api_base, 2) {
             Ok(client) => {
-                use zsb_zotero_api::ZoteroSource;
+                use zotero_bridge_zotero_api::ZoteroSource;
                 client.probe().await.is_ok()
             }
             Err(_) => false,
@@ -222,12 +230,22 @@ fn get_config(state: State<'_, AppState>) -> Result<Config, String> {
 }
 
 #[tauri::command]
+fn get_paths(state: State<'_, AppState>) -> PathsView {
+    let config_dir = state
+        .config_path
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    PathsView { config_dir }
+}
+
+#[tauri::command]
 fn save_config(
     app: AppHandle,
     state: State<'_, AppState>,
     config: Config,
 ) -> Result<String, String> {
-    zsb_core::config::save(&state.config_path, &config).map_err(|e| e.to_string())?;
+    zotero_bridge_core::config::save(&state.config_path, &config).map_err(|e| e.to_string())?;
     apply_autostart(&app, config.app.start_at_login);
     *state.config.write().unwrap() = config;
     Ok("设置已保存。".to_string())
@@ -246,19 +264,19 @@ fn rebuild_index(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn zotero_template() -> Option<String> {
-    zsb_core::zotero_prefs::attachment_rename_template()
+    zotero_bridge_core::zotero_prefs::attachment_rename_template()
 }
 
 #[tauri::command]
 fn refresh_links(state: State<'_, AppState>) -> Result<String, String> {
     let cfg = state.config.read().unwrap().clone();
     let mut db = Database::open(&state.db_path).map_err(|e| e.to_string())?;
-    let report = zsb_sync::refresh_mirrors(&mut db, &cfg).map_err(|e| e.to_string())?;
+    let report = zotero_bridge_sync::refresh_mirrors(&mut db, &cfg).map_err(|e| e.to_string())?;
     let mut completed = 0usize;
     let mut failed = 0usize;
-    for platform in zsb_sync::enabled_platforms(&cfg) {
-        let w =
-            zsb_mirror::worker::process_pending(&db, platform, 10000).map_err(|e| e.to_string())?;
+    for platform in zotero_bridge_sync::enabled_platforms(&cfg) {
+        let w = zotero_bridge_mirror::worker::process_pending(&db, platform, 10000)
+            .map_err(|e| e.to_string())?;
         completed += w.completed;
         failed += w.failed;
     }
@@ -286,7 +304,7 @@ fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), String> {
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_default(),
-        "logs" => zsb_core::paths::log_dir().map_err(|e| e.to_string())?,
+        "logs" => zotero_bridge_core::paths::log_dir().map_err(|e| e.to_string())?,
         other => return Err(format!("未知目录：{other}")),
     };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -323,7 +341,7 @@ async fn doctor(state: State<'_, AppState>) -> Result<Vec<String>, String> {
 
     match LocalApiClient::new(&cfg.zotero.api_base, cfg.zotero.request_timeout_seconds) {
         Ok(client) => {
-            use zsb_zotero_api::ZoteroSource;
+            use zotero_bridge_zotero_api::ZoteroSource;
             match client.probe().await {
                 Ok(info) => {
                     push(&mut lines, true, "Zotero process reachable".into());
@@ -343,7 +361,7 @@ async fn doctor(state: State<'_, AppState>) -> Result<Vec<String>, String> {
                         },
                     );
                 }
-                Err(zsb_core::Error::ApiDisabled) => {
+                Err(zotero_bridge_core::Error::ApiDisabled) => {
                     push(&mut lines, true, "Zotero process reachable".into());
                     push(
                         &mut lines,
@@ -362,7 +380,7 @@ async fn doctor(state: State<'_, AppState>) -> Result<Vec<String>, String> {
         .unwrap_or(false);
     push(&mut lines, fts_ok, "SQLite FTS5 available".into());
 
-    for platform in zsb_sync::engine::enabled_platforms(&cfg) {
+    for platform in zotero_bridge_sync::engine::enabled_platforms(&cfg) {
         let dir = cfg.mirror_dir(platform);
         let ok = std::fs::create_dir_all(&dir)
             .and_then(|_| {
@@ -429,7 +447,7 @@ fn spawn_sync_loop(app: AppHandle) {
                         let state = app.state::<AppState>();
                         *state.last_sync_error.lock().unwrap() = None;
                     }
-                    Err(zsb_core::Error::ZoteroOffline(_)) => {
+                    Err(zotero_bridge_core::Error::ZoteroOffline(_)) => {
                         // Quiet backoff: Zotero simply is not running.
                     }
                     Err(e) => {
@@ -456,17 +474,17 @@ fn spawn_sync_loop(app: AppHandle) {
 }
 
 fn main() {
-    let config_path = zsb_core::paths::resolve_config_file(None).expect("config path");
-    let config = zsb_core::config::load_or_create(&config_path).expect("load config");
-    let db_path = zsb_core::paths::resolve_database_file(
+    let config_path = zotero_bridge_core::paths::resolve_config_file(None).expect("config path");
+    let config = zotero_bridge_core::config::load_or_create(&config_path).expect("load config");
+    let db_path = zotero_bridge_core::paths::resolve_database_file(
         None,
         Some(&config.storage.database),
-        zsb_core::paths::is_portable_config(&config_path),
+        zotero_bridge_core::paths::is_portable_config(&config_path),
     )
     .expect("database path");
 
     // File logging into the platform log directory.
-    if let Ok(log_dir) = zsb_core::paths::log_dir() {
+    if let Ok(log_dir) = zotero_bridge_core::paths::log_dir() {
         let _ = std::fs::create_dir_all(&log_dir);
         let appender = tracing_appender::rolling::never(&log_dir, "zotero-bridge.log");
         let (writer, _guard) = tracing_appender::non_blocking(appender);
@@ -496,6 +514,7 @@ fn main() {
             sync_now,
             set_paused,
             get_config,
+            get_paths,
             save_config,
             rebuild_index,
             refresh_links,

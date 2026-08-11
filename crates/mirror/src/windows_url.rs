@@ -1,7 +1,7 @@
 //! Windows `.url` Internet Shortcut backend (spec section 13.3).
 
 use crate::MirrorBackend;
-use zsb_core::Platform;
+use zotero_bridge_core::Platform;
 
 pub struct WindowsUrlBackend;
 

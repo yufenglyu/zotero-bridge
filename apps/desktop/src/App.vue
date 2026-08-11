@@ -5,9 +5,7 @@ import {
   Activity,
   BookOpen,
   Database,
-  FileText,
   FolderOpen,
-  HardDrive,
   HelpCircle,
   Link,
   Monitor,
@@ -17,7 +15,6 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
-  Search,
   Settings,
   Stethoscope,
   Sun,
@@ -84,11 +81,15 @@ interface Config {
   storage: { database: string };
 }
 
+interface PathsView {
+  config_dir: string;
+}
+
 type ThemeMode = "light" | "dark" | "system";
+type PlatformKey = "windows" | "macos";
 
 const THEME_KEY = "zotero-bridge-theme-mode";
-const LEGACY_THEME_KEY = "zsb-theme-mode";
-const storedTheme = localStorage.getItem(THEME_KEY) || localStorage.getItem(LEGACY_THEME_KEY);
+const storedTheme = localStorage.getItem(THEME_KEY);
 const themeMode = ref<ThemeMode>((storedTheme as ThemeMode) || "system");
 const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
 
@@ -106,6 +107,7 @@ watch(systemDark, applyTheme);
 const tab = ref<"status" | "settings" | "doctor">("status");
 const status = ref<StatusView | null>(null);
 const config = ref<Config | null>(null);
+const paths = ref<PathsView | null>(null);
 const savedSnapshot = ref("");
 const doctorLines = ref<string[]>([]);
 const busy = ref(false);
@@ -121,19 +123,49 @@ const followZotero = ref(true);
 const customBackup = ref("");
 const zoteroTpl = ref<string | null>(null);
 
+const currentPlatformKey = computed<PlatformKey>(() => {
+  const platform = navigator.platform.toLowerCase();
+  return platform.includes("mac") ? "macos" : "windows";
+});
+
+const currentPlatformName = computed(() =>
+  currentPlatformKey.value === "macos" ? "macOS" : "Windows"
+);
+
+const currentLinkExtension = computed(() =>
+  currentPlatformKey.value === "macos" ? ".webloc" : ".url"
+);
+
+const activeMirrorConfig = computed(() => {
+  if (!config.value) return null;
+  return config.value.mirror[currentPlatformKey.value];
+});
+
+const currentMirrorDirectory = computed(() => {
+  const dirs = status.value?.mirror_directories ?? [];
+  return dirs.find((dir) => dir.platform === currentPlatformKey.value) ?? null;
+});
+
+const currentMirrorIssueCount = computed(() => {
+  const dir = currentMirrorDirectory.value;
+  if (!dir) return 0;
+  return dir.missing_files + dir.orphan_files + dir.stale_files;
+});
+
 function syncFollowState() {
-  const tpl = config.value?.mirror.windows.template ?? "";
+  const tpl = activeMirrorConfig.value?.template ?? "";
   followZotero.value = tpl.trim() === "" || tpl.trim() === LEGACY_DEFAULT_TEMPLATE;
 }
 
 watch(followZotero, (follow) => {
-  if (!config.value) return;
-  const cur = config.value.mirror.windows.template;
+  const mirror = activeMirrorConfig.value;
+  if (!mirror) return;
+  const cur = mirror.template;
   if (follow) {
     if (cur.trim() !== "" && cur.trim() !== LEGACY_DEFAULT_TEMPLATE) customBackup.value = cur;
-    config.value.mirror.windows.template = "";
+    mirror.template = "";
   } else {
-    config.value.mirror.windows.template = customBackup.value || LEGACY_DEFAULT_TEMPLATE;
+    mirror.template = customBackup.value || LEGACY_DEFAULT_TEMPLATE;
   }
 });
 
@@ -247,6 +279,8 @@ async function loadConfig() {
     syncFollowState();
   }
   zoteroTpl.value = await safeInvoke<string | null>("zotero_template");
+  const p = await safeInvoke<PathsView>("get_paths");
+  if (p) paths.value = p;
 }
 
 async function saveConfig() {
@@ -403,33 +437,37 @@ onUnmounted(() => {
                 <p>按当前索引、命名模板和 URI 模板检查本地链接文件是否一致。</p>
               </div>
             </div>
-            <div class="mirror-table">
-              <div
-                v-for="dir in status.mirror_directories"
-                :key="dir.platform"
+            <div v-if="currentMirrorDirectory" class="mirror-table">
+              <button
                 class="mirror-row"
-                :class="{ disabled: !dir.enabled, stale: dir.missing_files + dir.orphan_files + dir.stale_files > 0 }"
+                :class="{
+                  disabled: !currentMirrorDirectory.enabled,
+                  stale:
+                    currentMirrorIssueCount > 0,
+                }"
+                title="打开链接文件目录"
+                @click="openDir('mirror')"
               >
                 <div class="mirror-main">
-                  <strong>{{ dir.platform === "windows" ? "Windows" : "macOS" }}</strong>
-                  <span>{{ dir.directory }}</span>
+                  <strong>链接文件目录</strong>
+                  <span>{{ currentMirrorDirectory.directory }}</span>
                 </div>
                 <div class="mirror-stats">
-                  <span>文件 {{ dir.actual_files.toLocaleString() }} / {{ dir.expected_files.toLocaleString() }}</span>
-                  <span>缺失 {{ dir.missing_files }}</span>
-                  <span>孤儿 {{ dir.orphan_files }}</span>
-                  <span>过期 {{ dir.stale_files }}</span>
+                  <strong>{{ currentMirrorDirectory.actual_files.toLocaleString() }} / {{ currentMirrorDirectory.expected_files.toLocaleString() }}</strong>
+                  <span>本地文件 / 应有文件</span>
                 </div>
                 <div class="mirror-time">
-                  <span>创建 {{ fmtTime(dir.latest_created_at) }}</span>
-                  <span>更新 {{ fmtTime(dir.latest_modified_at) }}</span>
+                  <strong :class="{ warn: currentMirrorIssueCount > 0 }">
+                    {{ currentMirrorIssueCount === 0 ? "正常" : `${currentMirrorIssueCount} 项异常` }}
+                  </strong>
+                  <span>最近更新 {{ fmtTime(currentMirrorDirectory.latest_modified_at) }}</span>
                 </div>
-                <em>{{ dir.enabled ? "." + dir.extension : "未启用" }}</em>
-              </div>
+                <FolderOpen class="icon" />
+              </button>
             </div>
           </section>
 
-          <section class="panel span-7">
+          <section class="panel span-12">
             <div class="panel-head">
               <div>
                 <h3>同步状态</h3>
@@ -472,23 +510,6 @@ onUnmounted(() => {
               </button>
             </div>
           </section>
-
-          <section class="panel span-5">
-            <div class="panel-head">
-              <div>
-                <h3>目录</h3>
-                <p>打开常用位置，便于配置 Listary。</p>
-              </div>
-            </div>
-            <div class="action-list">
-              <button @click="openDir('mirror')">
-                <span><FolderOpen class="icon" />链接文件目录</span><em>.url / .webloc</em>
-              </button>
-              <button @click="openDir('config')">
-                <span><FileText class="icon" />配置文件目录</span><em>config.toml</em>
-              </button>
-            </div>
-          </section>
         </div>
       </section>
 
@@ -497,61 +518,56 @@ onUnmounted(() => {
           <h2>设置</h2>
         </div>
 
-        <div class="settings-grid">
-          <section class="panel">
-            <h3><Settings class="icon" />常规</h3>
-            <label class="check"><input type="checkbox" v-model="config.app.start_at_login" />开机自动启动</label>
-            <label class="field">
-              <span class="label-with-help">轮询周期<span class="hint-icon" title="后台自动检查 Zotero 变化的间隔，单位为秒。建议 15-60 秒。"><HelpCircle class="icon" /></span></span>
-              <input type="number" v-model.number="config.app.poll_interval_seconds" min="5" />
-            </label>
-            <label class="field"><span>日志级别</span><select v-model="config.app.log_level"><option value="error">error</option><option value="warn">warn</option><option value="info">info</option><option value="debug">debug</option></select></label>
+        <div class="settings-stack">
+          <section class="panel settings-card">
+            <h3><Settings class="icon" />基础运行</h3>
+            <div class="settings-form">
+              <label class="check inline-check"><input type="checkbox" v-model="config.app.start_at_login" />开机自动启动</label>
+              <label class="check inline-check"><input type="checkbox" v-model="config.zotero.include_user_library" />索引个人库</label>
+
+              <label class="field">
+                <span>Local API</span>
+                <input type="text" v-model="config.zotero.api_base" />
+              </label>
+              <label class="field">
+                <span class="label-with-help">轮询周期<span class="hint-icon" title="后台自动检查 Zotero 变化的间隔，单位为秒。建议 15-60 秒。"><HelpCircle class="icon" /></span></span>
+                <input type="number" v-model.number="config.app.poll_interval_seconds" min="5" />
+              </label>
+              <label class="field">
+                <span class="label-with-help">请求超时<span class="hint-icon" title="访问 Zotero Local API 的超时时间，单位为秒。"><HelpCircle class="icon" /></span></span>
+                <input type="number" v-model.number="config.zotero.request_timeout_seconds" min="1" />
+              </label>
+              <label class="field">
+                <span>群组库</span>
+                <select v-model="config.zotero.group_mode"><option value="all">全部索引</option><option value="none">不索引</option></select>
+              </label>
+              <label class="field">
+                <span>日志级别</span>
+                <select v-model="config.app.log_level"><option value="error">error</option><option value="warn">warn</option><option value="info">info</option><option value="debug">debug</option></select>
+              </label>
+              <label class="field">
+                <span>配置目录</span>
+                <input type="text" :value="paths?.config_dir || ''" readonly />
+                <button type="button" title="打开配置目录" @click="openDir('config')">
+                  <FolderOpen class="icon" />打开
+                </button>
+              </label>
+            </div>
           </section>
 
-          <section class="panel">
-            <h3><BookOpen class="icon" />Zotero 连接</h3>
-            <label class="field"><span>Local API</span><input type="text" v-model="config.zotero.api_base" /></label>
-            <label class="field">
-              <span class="label-with-help">请求超时<span class="hint-icon" title="访问 Zotero Local API 的超时时间，单位为秒。"><HelpCircle class="icon" /></span></span>
-              <input type="number" v-model.number="config.zotero.request_timeout_seconds" min="1" />
-            </label>
-            <label class="check"><input type="checkbox" v-model="config.zotero.include_user_library" />索引个人库</label>
-            <label class="field"><span>群组库</span><select v-model="config.zotero.group_mode"><option value="all">全部索引</option><option value="none">不索引</option></select></label>
-          </section>
-
-          <section class="panel">
-            <h3><Search class="icon" />搜索与索引</h3>
-            <label class="field"><span>默认结果数</span><input type="number" v-model.number="config.search.default_limit" min="1" max="100" /></label>
-            <label class="field"><span>结果数上限</span><input type="number" v-model.number="config.search.maximum_limit" min="1" max="500" /></label>
-            <label class="check"><input type="checkbox" v-model="config.search.index_abstract" />索引摘要</label>
-            <label class="check"><input type="checkbox" v-model="config.search.index_extra" />索引 Extra 字段</label>
-            <label class="check"><input type="checkbox" v-model="config.search.short_query_fallback" />短查询回退<span class="hint-icon" title="1-2 个字符的短词改用 LIKE 查询，改善中文短词搜索。"><HelpCircle class="icon" /></span></label>
-            <label class="check"><input type="checkbox" v-model="config.search.store_raw_json" />保存原始 JSON<span class="hint-icon" title="保存 Zotero 返回的完整条目数据，供命名模板读取类型特有字段。"><HelpCircle class="icon" /></span></label>
-          </section>
-
-          <section class="panel">
-            <h3><HardDrive class="icon" />存储</h3>
-            <label class="field">
-              <span class="label-with-help">索引数据库路径<span class="hint-icon" title="留空时使用默认位置；便携模式为 exe 旁的 data\\index.sqlite。修改数据库路径后需要重启。"><HelpCircle class="icon" /></span></span>
-              <input type="text" v-model="config.storage.database" placeholder="留空使用默认位置" />
-            </label>
-          </section>
-
-          <section class="panel wide">
+          <section v-if="activeMirrorConfig" class="panel settings-card">
             <h3><Link class="icon" />链接文件</h3>
             <div class="settings-section">
               <h4>目录设置</h4>
-              <div class="split">
-                <div class="platform-box">
-                  <h5>Windows</h5>
-                  <label class="check"><input type="checkbox" v-model="config.mirror.windows.enabled" />启用 .url 链接</label>
-                  <label class="field"><span>链接文件目录</span><input type="text" v-model="config.mirror.windows.directory" /></label>
-                </div>
-                <div class="platform-box">
-                  <h5>macOS</h5>
-                  <label class="check"><input type="checkbox" v-model="config.mirror.macos.enabled" />启用 .webloc 链接</label>
-                  <label class="field"><span>链接文件目录</span><input type="text" v-model="config.mirror.macos.directory" /></label>
-                </div>
+              <div class="platform-box">
+                <label class="check"><input type="checkbox" v-model="activeMirrorConfig.enabled" />启用 {{ currentLinkExtension }} 链接</label>
+                <label class="field">
+                  <span>链接文件目录</span>
+                  <input type="text" v-model="activeMirrorConfig.directory" />
+                  <button type="button" title="打开链接文件目录" @click="openDir('mirror')">
+                    <FolderOpen class="icon" />打开
+                  </button>
+                </label>
               </div>
             </div>
             <div class="settings-section">
@@ -559,21 +575,15 @@ onUnmounted(() => {
               <label class="check"><input type="checkbox" v-model="followZotero" />跟随 Zotero 命名模板</label>
               <label v-if="!followZotero" class="field field-top">
                 <span>自定义模板</span>
-                <textarea rows="5" spellcheck="false" v-model="config.mirror.windows.template"></textarea>
+                <textarea rows="5" spellcheck="false" v-model="activeMirrorConfig.template"></textarea>
               </label>
             </div>
             <div class="settings-section">
               <h4>URI 模板</h4>
-              <div class="split">
-                <label class="field">
-                  <span class="label-with-help">Windows URI<span class="hint-icon" title="写入 .url 文件 URL= 后面的内容。默认 {select_uri}，可用占位符：{select_uri}、{item_key}、{itemKey}、{title}。"><HelpCircle class="icon" /></span></span>
-                  <input type="text" v-model="config.mirror.windows.uri_template" placeholder="{select_uri}" />
-                </label>
-                <label class="field">
-                  <span class="label-with-help">macOS URI<span class="hint-icon" title="写入 .webloc 文件的 URL。默认 {select_uri}，可用占位符：{select_uri}、{item_key}、{itemKey}、{title}。"><HelpCircle class="icon" /></span></span>
-                  <input type="text" v-model="config.mirror.macos.uri_template" placeholder="{select_uri}" />
-                </label>
-              </div>
+              <label class="field">
+                <span class="label-with-help">{{ currentPlatformName }} URI<span class="hint-icon" title="写入链接文件的 URI。默认 {select_uri}，可用占位符：{select_uri}、{item_key}、{itemKey}、{title}。"><HelpCircle class="icon" /></span></span>
+                <input type="text" v-model="activeMirrorConfig.uri_template" placeholder="{select_uri}" />
+              </label>
             </div>
           </section>
         </div>

@@ -1,4 +1,4 @@
-//! zsb-index: local SQLite + FTS5 search index.
+//! zotero-bridge-index: local SQLite + FTS5 search index.
 //!
 //! The index is fully independent from Zotero's own `zotero.sqlite`
 //! (spec section 4.3): it stores normalized metadata, sync versions,

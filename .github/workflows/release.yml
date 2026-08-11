@@ -108,17 +108,7 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      - name: Build CLI binaries
-        run: |
-          cargo build --release -p zotero-bridge --target aarch64-apple-darwin
-          cargo build --release -p zotero-bridge --target x86_64-apple-darwin
-
-      - name: Build frontend
-        working-directory: apps/desktop
-        run: npm run build
-
       - name: Build macOS app
-        working-directory: apps/desktop
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -126,26 +116,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run tauri -- build --target universal-apple-darwin --bundles app,dmg --no-sign --ci
+        run: bash scripts/release-macos.sh --sign
 
       - name: Prepare macOS assets
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          BUNDLE_ROOT="target/universal-apple-darwin/release/bundle"
           mkdir -p release-assets
-
-          ditto -c -k --keepParent "target/aarch64-apple-darwin/release/zotero-bridge" "release-assets/zotero-bridge-v${VERSION}-macos-aarch64-cli.zip"
-          ditto -c -k --keepParent "target/x86_64-apple-darwin/release/zotero-bridge" "release-assets/zotero-bridge-v${VERSION}-macos-x64-cli.zip"
-
-          APP_PATH=$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -type d -name "*.app" | head -1 || true)
-          DMG_PATH=$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name "*.dmg" | head -1 || true)
-          [ -n "$APP_PATH" ] || { echo "macOS .app bundle not found" >&2; exit 1; }
-          [ -n "$DMG_PATH" ] || { echo "macOS .dmg bundle not found" >&2; exit 1; }
-
-          ditto -c -k --keepParent "$APP_PATH" "release-assets/zotero-bridge-v${VERSION}-macos-universal-app.zip"
-          cp "$DMG_PATH" "release-assets/zotero-bridge-v${VERSION}-macos-universal.dmg"
+          cp target/dist/zotero-bridge-v*-macos-universal-app.zip release-assets/
+          cp target/dist/zotero-bridge-v*-macos-universal.dmg release-assets/
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

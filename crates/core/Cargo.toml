@@ -1,5 +1,5 @@
 [package]
-name = "zsb-core"
+name = "zotero-bridge-core"
 description = "Zotero Bridge core types: config, models, errors"
 version.workspace = true
 edition.workspace = true

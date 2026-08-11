@@ -5,7 +5,7 @@
 //! locally persisted `legacy:<uuid>` identifier so caches stay isolated
 //! per installation (spec section 4.1 / 8.1).
 
-use zsb_core::{Result, ServerInfo};
+use zotero_bridge_core::{Result, ServerInfo};
 
 use crate::source::ZoteroSource;
 

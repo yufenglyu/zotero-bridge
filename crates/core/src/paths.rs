@@ -1,20 +1,20 @@
 //! Platform directory layout (spec section 7).
 //!
 //! Windows:
-//!   config:  %APPDATA%\ZoteroSearchBridge\config.toml
-//!   data:    %LOCALAPPDATA%\ZoteroSearchBridge\data\index.sqlite
-//!   logs:    %LOCALAPPDATA%\ZoteroSearchBridge\logs\
-//!   mirrors: %LOCALAPPDATA%\ZoteroSearchBridge\mirrors\windows\
+//!   config:  %APPDATA%\ZoteroBridge\config.toml
+//!   data:    %LOCALAPPDATA%\ZoteroBridge\data\index.sqlite
+//!   logs:    %LOCALAPPDATA%\ZoteroBridge\logs\
+//!   mirrors: %LOCALAPPDATA%\ZoteroBridge\mirrors\windows\
 //!
 //! macOS:
-//!   config + data: ~/Library/Application Support/ZoteroSearchBridge/
-//!   logs:          ~/Library/Logs/ZoteroSearchBridge/
+//!   config + data: ~/Library/Application Support/ZoteroBridge/
+//!   logs:          ~/Library/Logs/ZoteroBridge/
 //!   mirrors:       ~/Zotero Links/
 
 use crate::errors::{Error, Result};
 use std::path::PathBuf;
 
-const APP_DIR: &str = "ZoteroSearchBridge";
+const APP_DIR: &str = "ZoteroBridge";
 
 fn home_dir() -> Result<PathBuf> {
     std::env::var_os("HOME")
@@ -120,16 +120,10 @@ pub fn expand_path(input: &str) -> PathBuf {
 
 /// Environment variable overriding the config file location.
 pub const ENV_CONFIG: &str = "ZOTERO_BRIDGE_CONFIG";
-/// Legacy environment variable kept for existing scripts.
-pub const LEGACY_ENV_CONFIG: &str = "ZSB_CONFIG";
 /// Environment variable overriding the index database location.
 pub const ENV_DATABASE: &str = "ZOTERO_BRIDGE_DATABASE";
-/// Legacy environment variable kept for existing scripts.
-pub const LEGACY_ENV_DATABASE: &str = "ZSB_DATABASE";
 /// Marker filename enabling portable mode when placed next to the exe.
 pub const PORTABLE_CONFIG_NAME: &str = "zotero-bridge-config.toml";
-/// Legacy portable marker kept so existing portable installs do not lose data.
-pub const LEGACY_PORTABLE_CONFIG_NAME: &str = "zsb-config.toml";
 
 /// Directory containing the running executable.
 pub fn exe_dir() -> Option<PathBuf> {
@@ -141,11 +135,9 @@ pub fn exe_dir() -> Option<PathBuf> {
 /// Portable-mode marker config next to the executable, if present.
 pub fn portable_config_file() -> Option<PathBuf> {
     let dir = exe_dir()?;
-    for name in [PORTABLE_CONFIG_NAME, LEGACY_PORTABLE_CONFIG_NAME] {
-        let candidate = dir.join(name);
-        if candidate.exists() {
-            return Some(candidate);
-        }
+    let candidate = dir.join(PORTABLE_CONFIG_NAME);
+    if candidate.exists() {
+        return Some(candidate);
     }
     None
 }
@@ -157,18 +149,15 @@ pub fn is_portable_config(path: &std::path::Path) -> bool {
 
 /// Resolve the config file location.
 ///
-/// Priority: explicit override (CLI flag) > `$ZSB_CONFIG` > portable
-/// marker `<exe>/zotero-bridge-config.toml` > legacy marker
-/// `<exe>/zsb-config.toml` > platform default.
-pub fn resolve_config_file(cli_override: Option<&std::path::Path>) -> Result<PathBuf> {
-    if let Some(p) = cli_override {
+/// Priority: explicit override > `$ZOTERO_BRIDGE_CONFIG` > portable
+/// marker `<exe>/zotero-bridge-config.toml` > platform default.
+pub fn resolve_config_file(explicit_override: Option<&std::path::Path>) -> Result<PathBuf> {
+    if let Some(p) = explicit_override {
         return Ok(p.to_path_buf());
     }
-    for name in [ENV_CONFIG, LEGACY_ENV_CONFIG] {
-        if let Some(v) = std::env::var_os(name) {
-            if !v.is_empty() {
-                return Ok(PathBuf::from(v));
-            }
+    if let Some(v) = std::env::var_os(ENV_CONFIG) {
+        if !v.is_empty() {
+            return Ok(PathBuf::from(v));
         }
     }
     if let Some(p) = portable_config_file() {
@@ -179,22 +168,20 @@ pub fn resolve_config_file(cli_override: Option<&std::path::Path>) -> Result<Pat
 
 /// Resolve the index database location.
 ///
-/// Priority: explicit override (CLI flag) > `$ZSB_DATABASE` >
+/// Priority: explicit override > `$ZOTERO_BRIDGE_DATABASE` >
 /// `[storage].database` in config > portable default `<exe>/data/index.sqlite`
 /// (only in portable mode) > platform default.
 pub fn resolve_database_file(
-    cli_override: Option<&std::path::Path>,
+    explicit_override: Option<&std::path::Path>,
     config_db: Option<&str>,
     portable: bool,
 ) -> Result<PathBuf> {
-    if let Some(p) = cli_override {
+    if let Some(p) = explicit_override {
         return Ok(p.to_path_buf());
     }
-    for name in [ENV_DATABASE, LEGACY_ENV_DATABASE] {
-        if let Some(v) = std::env::var_os(name) {
-            if !v.is_empty() {
-                return Ok(PathBuf::from(v));
-            }
+    if let Some(v) = std::env::var_os(ENV_DATABASE) {
+        if !v.is_empty() {
+            return Ok(PathBuf::from(v));
         }
     }
     if let Some(db) = config_db {
@@ -216,8 +203,8 @@ mod tests {
 
     #[test]
     fn expands_windows_env_vars() {
-        std::env::set_var("ZSB_TEST_DIR", "D:\\Data");
-        let p = expand_path("%ZSB_TEST_DIR%\\ZoteroLinks");
+        std::env::set_var("ZOTERO_BRIDGE_TEST_DIR", "D:\\Data");
+        let p = expand_path("%ZOTERO_BRIDGE_TEST_DIR%\\ZoteroLinks");
         assert_eq!(p, PathBuf::from("D:\\Data\\ZoteroLinks"));
     }
 
@@ -232,24 +219,26 @@ mod tests {
     #[test]
     fn windows_layout_matches_spec() {
         let cfg = config_file().unwrap().to_string_lossy().into_owned();
-        assert!(cfg.ends_with("ZoteroSearchBridge\\config.toml"));
+        assert!(cfg.ends_with("ZoteroBridge\\config.toml"));
         assert!(cfg.contains("Roaming"));
         let db = database_file().unwrap().to_string_lossy().into_owned();
-        assert!(db.ends_with("ZoteroSearchBridge\\data\\index.sqlite"));
+        assert!(db.ends_with("ZoteroBridge\\data\\index.sqlite"));
         assert!(db.contains("Local"));
     }
 
     #[test]
-    fn database_resolution_cli_wins() {
-        let cli = std::path::Path::new("D:\\cli\\a.sqlite");
-        let got = resolve_database_file(Some(cli), Some("D:\\cfg\\b.sqlite"), true).unwrap();
-        assert_eq!(got, cli.to_path_buf());
+    fn database_resolution_explicit_override_wins() {
+        let override_path = std::path::Path::new("D:\\override\\a.sqlite");
+        let got =
+            resolve_database_file(Some(override_path), Some("D:\\cfg\\b.sqlite"), true).unwrap();
+        assert_eq!(got, override_path.to_path_buf());
     }
 
     #[test]
     fn database_resolution_config_wins_over_portable() {
-        std::env::set_var("ZSB_TEST_DB", "D:\\custom");
-        let got = resolve_database_file(None, Some("%ZSB_TEST_DB%\\index.sqlite"), true).unwrap();
+        std::env::set_var("ZOTERO_BRIDGE_TEST_DB", "D:\\custom");
+        let got = resolve_database_file(None, Some("%ZOTERO_BRIDGE_TEST_DB%\\index.sqlite"), true)
+            .unwrap();
         assert_eq!(got, PathBuf::from("D:\\custom\\index.sqlite"));
     }
 
@@ -269,9 +258,9 @@ mod tests {
     }
 
     #[test]
-    fn config_resolution_cli_wins() {
-        let cli = std::path::Path::new("D:\\cli\\config.toml");
-        let got = resolve_config_file(Some(cli)).unwrap();
-        assert_eq!(got, cli.to_path_buf());
+    fn config_resolution_explicit_override_wins() {
+        let override_path = std::path::Path::new("D:\\override\\config.toml");
+        let got = resolve_config_file(Some(override_path)).unwrap();
+        assert_eq!(got, override_path.to_path_buf());
     }
 }

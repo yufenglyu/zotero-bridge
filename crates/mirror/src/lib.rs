@@ -1,4 +1,4 @@
-//! zsb-mirror: filesystem mirror manager (spec section 13).
+//! zotero-bridge-mirror: filesystem mirror manager (spec section 13).
 //!
 //! Generates platform shortcut files that point at `zotero://select/...`
 //! URIs, and executes persisted mirror jobs (outbox pattern, spec 8.4).
@@ -9,7 +9,7 @@ pub mod windows_url;
 pub mod worker;
 pub mod ztemplate;
 
-use zsb_core::Platform;
+use zotero_bridge_core::Platform;
 
 /// A platform-specific shortcut backend (spec section 17.3).
 pub trait MirrorBackend: Send + Sync {

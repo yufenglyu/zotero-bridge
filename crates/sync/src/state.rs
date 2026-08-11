@@ -1,6 +1,6 @@
 //! Sync report types.
 
-use zsb_core::LibraryKind;
+use zotero_bridge_core::LibraryKind;
 
 #[derive(Debug, Clone)]
 pub struct LibrarySyncReport {

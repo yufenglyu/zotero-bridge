@@ -121,7 +121,7 @@ impl Default for MirrorConfig {
                 enabled: true,
                 directory: crate::paths::default_mirror_dir_windows()
                     .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|_| "%LOCALAPPDATA%/ZoteroSearchBridge/mirrors/windows".into()),
+                    .unwrap_or_else(|_| "%LOCALAPPDATA%/ZoteroBridge/mirrors/windows".into()),
                 template: DEFAULT_TEMPLATE.into(),
                 uri_template: DEFAULT_URI_TEMPLATE.into(),
             },
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn load_missing_creates_default() {
-        let dir = std::env::temp_dir().join(format!("zsb-cfg-{}", uuid_v4()));
+        let dir = std::env::temp_dir().join(format!("zotero-bridge-cfg-{}", uuid_v4()));
         let path = dir.join("config.toml");
         let cfg = load_or_create(&path).unwrap();
         assert!(path.exists());

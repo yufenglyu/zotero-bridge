@@ -1,7 +1,7 @@
 //! macOS `.webloc` backend (spec section 13.4).
 
 use crate::MirrorBackend;
-use zsb_core::Platform;
+use zotero_bridge_core::Platform;
 
 pub struct MacosWeblocBackend;
 

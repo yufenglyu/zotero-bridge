@@ -6,13 +6,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::time::Duration;
 use tracing::{debug, info, warn};
-use zsb_core::{
+use zotero_bridge_core::{
     Config, Error, MirrorOperation, NewMirrorJob, Platform, RemoteLibrary, Result, SyncBatch,
 };
-use zsb_index::Database;
-use zsb_mirror::{backend_for, filename};
-use zsb_zotero_api::discovery::probe_instance;
-use zsb_zotero_api::{ZoteroItem, ZoteroSource, BATCH_SIZE};
+use zotero_bridge_index::Database;
+use zotero_bridge_mirror::{backend_for, filename};
+use zotero_bridge_zotero_api::discovery::probe_instance;
+use zotero_bridge_zotero_api::{ZoteroItem, ZoteroSource, BATCH_SIZE};
 
 /// Retries when the library version changes mid-sync (spec section 12.4).
 const UNSTABLE_MAX_RETRIES: u32 = 3;
@@ -82,8 +82,8 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
         // Discover libraries and filter by configuration.
         let mut remotes = self.source.list_libraries().await?;
         remotes.retain(|lib| match lib.kind {
-            zsb_core::LibraryKind::User => self.config.zotero.include_user_library,
-            zsb_core::LibraryKind::Group => self.config.zotero.group_mode != "none",
+            zotero_bridge_core::LibraryKind::User => self.config.zotero.include_user_library,
+            zotero_bridge_core::LibraryKind::Group => self.config.zotero.group_mode != "none",
         });
 
         let mut report = SyncReport {
@@ -249,7 +249,7 @@ impl<'a, S: ZoteroSource> SyncEngine<'a, S> {
     async fn fetch_full_scan(
         &self,
         remote: &RemoteLibrary,
-        versions: zsb_core::VersionMap,
+        versions: zotero_bridge_core::VersionMap,
     ) -> Result<FetchOutcome> {
         let keys: Vec<String> = versions.keys().cloned().collect();
         let mut items: Vec<ZoteroItem> = Vec::with_capacity(keys.len());
@@ -417,7 +417,7 @@ pub fn enabled_platforms(config: &Config) -> Vec<Platform> {
 /// each upserted item with its rendered mirror base filename.
 fn plan_mirror_jobs(
     config: &Config,
-    upserts: &mut [zsb_core::IndexedItem],
+    upserts: &mut [zotero_bridge_core::IndexedItem],
     deleted_keys: &[String],
     existing_names: &HashMap<String, String>,
 ) -> Vec<NewMirrorJob> {
@@ -427,10 +427,10 @@ fn plan_mirror_jobs(
     // Render the canonical base filename once per item (first enabled
     // platform's template) and store it on the item. The effective
     // template follows Zotero's own attachment rename template unless the
-    // user configured a custom one (zsb_core::zotero_prefs).
+    // user configured a custom one (zotero_bridge_core::zotero_prefs).
     if let Some(first) = platforms.first() {
         let template =
-            zsb_core::zotero_prefs::resolve_template(&config.mirror_for(*first).template);
+            zotero_bridge_core::zotero_prefs::resolve_template(&config.mirror_for(*first).template);
         for item in upserts.iter_mut() {
             item.mirror_filename = Some(filename::render_auto(&template, item));
         }
@@ -462,8 +462,9 @@ fn plan_mirror_jobs(
 
     for platform in platforms {
         let backend = backend_for(platform);
-        let template =
-            zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platform).template);
+        let template = zotero_bridge_core::zotero_prefs::resolve_template(
+            &config.mirror_for(platform).template,
+        );
         let dir = config.mirror_dir(platform);
 
         for item in upserts.iter() {
@@ -567,8 +568,9 @@ pub fn refresh_mirrors(db: &mut Database, config: &Config) -> Result<MirrorRefre
     if platforms.is_empty() {
         return Ok(MirrorRefreshReport::default());
     }
-    let template =
-        zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platforms[0]).template);
+    let template = zotero_bridge_core::zotero_prefs::resolve_template(
+        &config.mirror_for(platforms[0]).template,
+    );
     let mut report = MirrorRefreshReport::default();
     let mut expected_paths: HashMap<Platform, HashSet<std::path::PathBuf>> = HashMap::new();
     let mut cleanup_jobs = Vec::new();
@@ -779,8 +781,9 @@ fn mirror_expectations(
         return Ok(expected);
     }
 
-    let template =
-        zsb_core::zotero_prefs::resolve_template(&config.mirror_for(platforms[0]).template);
+    let template = zotero_bridge_core::zotero_prefs::resolve_template(
+        &config.mirror_for(platforms[0]).template,
+    );
     for lib in db.list_libraries(None)? {
         let items = db.items_for_library(lib.id)?;
         let mut taken: HashMap<String, String> = HashMap::new();
@@ -812,7 +815,7 @@ fn mirror_expectations(
 }
 
 fn update_latest(target: &mut Option<String>, value: std::time::SystemTime) {
-    if let Some(formatted) = zsb_core::timeutil::system_time_rfc3339(value) {
+    if let Some(formatted) = zotero_bridge_core::timeutil::system_time_rfc3339(value) {
         if target
             .as_deref()
             .map(|t| formatted.as_str() > t)
@@ -823,7 +826,7 @@ fn update_latest(target: &mut Option<String>, value: std::time::SystemTime) {
     }
 }
 
-fn render_uri_template(template: &str, item: &zsb_core::IndexedItem) -> String {
+fn render_uri_template(template: &str, item: &zotero_bridge_core::IndexedItem) -> String {
     let template = if template.trim().is_empty() {
         "{select_uri}"
     } else {
@@ -849,7 +852,7 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zsb_core::LibraryKind;
+    use zotero_bridge_core::LibraryKind;
 
     /// Custom template for tests: renders identically to the built-in
     /// default but differs as a string, so template resolution treats it
@@ -861,7 +864,7 @@ mod tests {
     fn test_config() -> Config {
         let mut cfg = Config::default();
         cfg.mirror.windows.enabled = true;
-        cfg.mirror.windows.directory = "/tmp/zsb-test-mirrors".into();
+        cfg.mirror.windows.directory = "/tmp/zotero-bridge-test-mirrors".into();
         cfg.mirror.windows.template = TEST_TEMPLATE.into();
         cfg.mirror.macos.enabled = false;
         cfg
@@ -870,7 +873,7 @@ mod tests {
     #[test]
     fn plans_create_rename_delete_jobs() {
         let cfg = test_config();
-        let item = |key: &str, creator: &str| zsb_core::IndexedItem {
+        let item = |key: &str, creator: &str| zotero_bridge_core::IndexedItem {
             item_key: key.into(),
             primary_creator: creator.into(),
             year: "2024".into(),
@@ -902,7 +905,7 @@ mod tests {
     #[test]
     fn no_job_when_filename_unchanged() {
         let cfg = test_config();
-        let item = zsb_core::IndexedItem {
+        let item = zotero_bridge_core::IndexedItem {
             item_key: "SAME0001".into(),
             primary_creator: "张三".into(),
             year: "2024".into(),
@@ -933,7 +936,7 @@ mod tests {
     fn zotero_template_collisions_get_key_suffix() {
         let mut cfg = test_config();
         cfg.mirror.windows.template = "【{{authors}}】{{title}}".into();
-        let item = |key: &str| zsb_core::IndexedItem {
+        let item = |key: &str| zotero_bridge_core::IndexedItem {
             item_key: key.into(),
             primary_creator: "张三".into(),
             year: "2024".into(),
@@ -957,13 +960,13 @@ mod tests {
 
     #[test]
     fn refresh_renames_changed_and_rewrites_missing() {
-        let dir = std::env::temp_dir().join(format!("zsb-refresh-{}", uuid_v4()));
+        let dir = std::env::temp_dir().join(format!("zotero-bridge-refresh-{}", uuid_v4()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut cfg = test_config();
         cfg.mirror.windows.directory = dir.to_string_lossy().into_owned();
 
         let mut db = Database::open_in_memory().unwrap();
-        db.upsert_instance(&zsb_core::ServerInfo {
+        db.upsert_instance(&zotero_bridge_core::ServerInfo {
             api_base: "http://localhost:23119/api".into(),
             api_version: Some(3),
             schema_version: None,
@@ -972,7 +975,7 @@ mod tests {
         .unwrap();
         let lib_id = db.upsert_library("srv", &RemoteLibrary::user()).unwrap();
 
-        let item = |key: &str, creator: &str, stored: &str| zsb_core::IndexedItem {
+        let item = |key: &str, creator: &str, stored: &str| zotero_bridge_core::IndexedItem {
             item_key: key.into(),
             item_version: 1,
             item_type: "journalArticle".into(),
@@ -1011,7 +1014,7 @@ mod tests {
         assert_eq!(report.renamed, 1);
         assert_eq!(report.rewritten, 1);
 
-        zsb_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
+        zotero_bridge_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
         assert!(!dir.join("旧名字 -- AAAA0001.url").exists());
         assert!(dir
             .join("张三 - 2024 - 燃气轮机研究 -- AAAA0001.url")
@@ -1035,7 +1038,7 @@ mod tests {
             (report.renamed, report.rewritten, report.deleted),
             (0, 2, 0)
         );
-        zsb_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
+        zotero_bridge_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
         let rewritten =
             std::fs::read_to_string(dir.join("李四 - 2024 - 燃气轮机研究 -- BBBB0002.url"))
                 .unwrap();
@@ -1044,7 +1047,7 @@ mod tests {
         std::fs::write(dir.join("orphan.url"), "stale").unwrap();
         let report = refresh_mirrors(&mut db, &cfg).unwrap();
         assert_eq!(report.deleted, 1);
-        zsb_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
+        zotero_bridge_mirror::worker::process_pending(&db, Platform::Windows, 100).unwrap();
         assert!(!dir.join("orphan.url").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }

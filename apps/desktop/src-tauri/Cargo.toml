@@ -1,5 +1,5 @@
 [package]
-name = "zotero-bridge-desktop"
+name = "zotero-bridge"
 description = "Zotero Bridge desktop tray app (Tauri)"
 version.workspace = true
 edition.workspace = true
@@ -11,12 +11,12 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-autostart = "2"
-zsb-core = { path = "../../../crates/core" }
-zsb-zotero-api = { path = "../../../crates/zotero-api" }
-zsb-index = { path = "../../../crates/index" }
-zsb-sync = { path = "../../../crates/sync" }
-zsb-mirror = { path = "../../../crates/mirror" }
-zsb-launcher = { path = "../../../crates/launcher" }
+zotero-bridge-core = { path = "../../../crates/core" }
+zotero-bridge-zotero-api = { path = "../../../crates/zotero-api" }
+zotero-bridge-index = { path = "../../../crates/index" }
+zotero-bridge-sync = { path = "../../../crates/sync" }
+zotero-bridge-mirror = { path = "../../../crates/mirror" }
+zotero-bridge-launcher = { path = "../../../crates/launcher" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

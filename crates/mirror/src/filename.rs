@@ -1,7 +1,7 @@
 //! Mirror filename templates and cross-platform sanitization
 //! (spec sections 13.1 and 13.2).
 
-use zsb_core::IndexedItem;
+use zotero_bridge_core::IndexedItem;
 
 /// Maximum base filename length (without extension), per spec section 13.2.
 pub const MAX_BASENAME_CHARS: usize = 180;

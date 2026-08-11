@@ -1,10 +1,10 @@
-//! zsb-launcher: open `zotero://select/...` URIs with the OS handler
+//! zotero-bridge-launcher: open `zotero://select/...` URIs with the OS handler
 //! (spec section 17.4). Zotero registers the `zotero://` scheme; the OS
 //! starts Zotero if needed and focuses the item.
 
 pub mod platform;
 
-use zsb_core::{Error, Result};
+use zotero_bridge_core::{Error, Result};
 
 /// Abstraction over the OS "open this URI" facility.
 pub trait UriLauncher {

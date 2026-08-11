@@ -3,11 +3,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
-use zsb_core::{Config, LibraryKind, Platform, RemoteLibrary, Result, ServerInfo, VersionMap};
-use zsb_index::Database;
-use zsb_sync::SyncEngine;
-use zsb_zotero_api::source::{DeletedObjects, ItemResponse, VersionResponse};
-use zsb_zotero_api::{DeletedResponse, ZoteroItem, ZoteroSource};
+use zotero_bridge_core::{
+    Config, LibraryKind, Platform, RemoteLibrary, Result, ServerInfo, VersionMap,
+};
+use zotero_bridge_index::Database;
+use zotero_bridge_sync::SyncEngine;
+use zotero_bridge_zotero_api::source::{DeletedObjects, ItemResponse, VersionResponse};
+use zotero_bridge_zotero_api::{DeletedResponse, ZoteroItem, ZoteroSource};
 
 /// In-memory Zotero stand-in. The user library and each group library
 /// hold separate item sets, like the real API.
@@ -153,14 +155,17 @@ fn test_config() -> Config {
     let mut cfg = Config::default();
     cfg.mirror.windows.enabled = true;
     cfg.mirror.windows.directory = std::env::temp_dir()
-        .join(format!("zsb-it-{}", std::process::id()))
+        .join(format!("zotero-bridge-it-{}", std::process::id()))
         .to_string_lossy()
         .into_owned();
     cfg.mirror.macos.enabled = false;
     cfg
 }
 
-async fn synced_db(source: &MockSource, cfg: &Config) -> (Database, zsb_sync::SyncReport) {
+async fn synced_db(
+    source: &MockSource,
+    cfg: &Config,
+) -> (Database, zotero_bridge_sync::SyncReport) {
     let mut db = Database::open_in_memory().unwrap();
     let report = {
         let mut engine = SyncEngine::new(source, &mut db, cfg);
@@ -169,8 +174,12 @@ async fn synced_db(source: &MockSource, cfg: &Config) -> (Database, zsb_sync::Sy
     (db, report)
 }
 
-fn search(db: &Database, q: &str) -> Vec<zsb_core::SearchResult> {
-    zsb_index::search::search(db.connection(), &zsb_index::build_search_query(q, 30)).unwrap()
+fn search(db: &Database, q: &str) -> Vec<zotero_bridge_core::SearchResult> {
+    zotero_bridge_index::search::search(
+        db.connection(),
+        &zotero_bridge_index::build_search_query(q, 30),
+    )
+    .unwrap()
 }
 
 #[tokio::test]
@@ -194,7 +203,7 @@ async fn initial_sync_indexes_items_and_plans_mirrors() {
     assert_eq!(jobs.len(), 2);
     assert!(jobs
         .iter()
-        .all(|j| j.operation == zsb_core::MirrorOperation::Create));
+        .all(|j| j.operation == zotero_bridge_core::MirrorOperation::Create));
 }
 
 #[tokio::test]
@@ -228,7 +237,7 @@ async fn incremental_sync_picks_up_changes() {
     let jobs = db.pending_jobs(Platform::Windows, 100).unwrap();
     assert!(jobs
         .iter()
-        .any(|j| j.operation == zsb_core::MirrorOperation::Rename));
+        .any(|j| j.operation == zotero_bridge_core::MirrorOperation::Rename));
 }
 
 #[tokio::test]
@@ -254,7 +263,7 @@ async fn deleted_items_disappear_from_index() {
     let jobs = db.pending_jobs(Platform::Windows, 100).unwrap();
     assert!(jobs
         .iter()
-        .any(|j| j.operation == zsb_core::MirrorOperation::Delete));
+        .any(|j| j.operation == zotero_bridge_core::MirrorOperation::Delete));
 }
 
 #[tokio::test]
@@ -360,7 +369,7 @@ async fn new_instance_gets_isolated_partition() {
     let jobs = db.pending_jobs(Platform::Windows, 100).unwrap();
     assert!(jobs
         .iter()
-        .any(|j| j.operation == zsb_core::MirrorOperation::Delete));
+        .any(|j| j.operation == zotero_bridge_core::MirrorOperation::Delete));
 }
 
 #[tokio::test]

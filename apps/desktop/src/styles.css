@@ -479,7 +479,11 @@ p {
 }
 
 .mirror-row {
-  grid-template-columns: minmax(260px, 1.35fr) minmax(300px, 1fr) minmax(220px, 0.8fr) auto;
+  width: 100%;
+  grid-template-columns: minmax(320px, 1.5fr) minmax(150px, 0.55fr) minmax(240px, 0.9fr) auto;
+  text-align: left;
+  justify-content: stretch;
+  color: var(--text);
 }
 
 .mirror-row.disabled {
@@ -488,6 +492,10 @@ p {
 
 .mirror-row.stale {
   border-color: color-mix(in srgb, var(--warn) 32%, var(--line));
+}
+
+.mirror-row:hover:not(:disabled) {
+  background: var(--surface-2);
 }
 
 .mirror-main,
@@ -505,7 +513,9 @@ p {
   gap: 3px;
 }
 
-.mirror-main span {
+.mirror-main span,
+.mirror-time span,
+.mirror-stats span {
   max-width: 100%;
   color: var(--muted);
   overflow: hidden;
@@ -516,15 +526,23 @@ p {
 
 .mirror-stats,
 .mirror-time {
-  flex-wrap: wrap;
-  color: var(--muted);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mirror-stats strong,
+.mirror-time strong {
+  font-size: 15px;
+}
+
+.mirror-stats span,
+.mirror-time span {
   font-size: 12px;
 }
 
-.mirror-row em {
-  color: var(--muted);
-  font-style: normal;
-  font-size: 12px;
+.mirror-time .warn {
+  color: var(--warn);
 }
 
 .tag {
@@ -555,6 +573,23 @@ p {
   gap: 12px;
 }
 
+.settings-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-card {
+  padding: 22px 24px;
+}
+
+.settings-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 24px;
+  row-gap: 12px;
+  align-items: center;
+}
+
 .wide {
   grid-column: 1 / -1;
 }
@@ -568,7 +603,7 @@ p {
 }
 
 .field > span {
-  width: 128px;
+  width: 118px;
   flex-shrink: 0;
   color: var(--muted);
 }
@@ -584,6 +619,10 @@ p {
   color: var(--text);
   padding: 8px 10px;
   user-select: text;
+}
+
+.field button {
+  flex: 0 0 auto;
 }
 
 .field textarea {
@@ -602,6 +641,11 @@ p {
 
 .check {
   color: var(--text);
+}
+
+.inline-check {
+  min-height: 38px;
+  margin-top: 0;
 }
 
 .label-with-help {
@@ -810,6 +854,7 @@ p {
 
   .metric-grid,
   .settings-grid,
+  .settings-form,
   .split,
   .facts {
     grid-template-columns: 1fr;

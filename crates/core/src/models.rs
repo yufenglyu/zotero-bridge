@@ -263,7 +263,7 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    /// `uid` used by Alfred JSON output, e.g. "library:N49R8KAQ".
+    /// Stable result identifier, e.g. "library:N49R8KAQ".
     pub fn uid(&self) -> String {
         match self.library_kind {
             LibraryKind::User => format!("library:{}", self.item_key),

@@ -1,4 +1,4 @@
-"""Generate ZSB app icons (PNG 32/128/256 + ICO) into src-tauri/icons/."""
+"""Generate Zotero Bridge app icons (PNG 32/128/256 + ICO) into src-tauri/icons/."""
 from pathlib import Path
 from PIL import Image, ImageDraw
 

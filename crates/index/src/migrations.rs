@@ -1,7 +1,7 @@
 //! Schema migrations, tracked with `PRAGMA user_version`.
 
 use rusqlite::Connection;
-use zsb_core::{Error, Result};
+use zotero_bridge_core::{Error, Result};
 
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../../../migrations/0001_initial.sql")),

@@ -4,8 +4,8 @@ use crate::migrations;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use zsb_core::timeutil::now_rfc3339;
-use zsb_core::{
+use zotero_bridge_core::timeutil::now_rfc3339;
+use zotero_bridge_core::{
     Error, IndexedItem, LibraryState, MirrorJob, MirrorOperation, Platform, RemoteLibrary, Result,
     ServerInfo, SyncBatch,
 };
@@ -19,7 +19,7 @@ pub struct LibraryRecord {
     pub server_id: String,
 }
 
-/// Aggregate statistics for `zsb status`.
+/// Aggregate statistics shown in the desktop status view.
 #[derive(Debug, Clone, Default)]
 pub struct IndexStats {
     pub item_count: u64,
@@ -198,8 +198,8 @@ impl Database {
                 id,
                 server_id: row.get(1)?,
                 remote: RemoteLibrary {
-                    kind: zsb_core::LibraryKind::parse(&kind)
-                        .unwrap_or(zsb_core::LibraryKind::User),
+                    kind: zotero_bridge_core::LibraryKind::parse(&kind)
+                        .unwrap_or(zotero_bridge_core::LibraryKind::User),
                     zotero_library_id: group_id,
                     display_name: row.get(4)?,
                     api_prefix: row.get(5)?,
@@ -418,7 +418,7 @@ impl Database {
         Ok(map)
     }
 
-    /// Look up the select URI for `zsb open --library ... --key ...`.
+    /// Look up the select URI for a library item.
     pub fn find_select_uri(
         &self,
         library_kind: &str,
@@ -631,7 +631,7 @@ impl Database {
 
     /// Enqueue standalone mirror jobs outside a sync batch (e.g. mirror
     /// cleanup when the Zotero instance changes).
-    pub fn enqueue_jobs(&self, jobs: &[zsb_core::NewMirrorJob]) -> Result<()> {
+    pub fn enqueue_jobs(&self, jobs: &[zotero_bridge_core::NewMirrorJob]) -> Result<()> {
         let now = now_rfc3339();
         let mut stmt = self
             .conn

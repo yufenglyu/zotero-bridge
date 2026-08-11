@@ -1,12 +1,12 @@
 [package]
-name = "zsb-index"
+name = "zotero-bridge-index"
 description = "Local SQLite FTS5 index for Zotero Bridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-zsb-core = { path = "../core" }
+zotero-bridge-core = { path = "../core" }
 rusqlite.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

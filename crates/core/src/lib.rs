@@ -1,4 +1,4 @@
-//! zsb-core: shared configuration, data models and error types for
+//! zotero-bridge-core: shared configuration, data models and error types for
 //! Zotero Bridge.
 
 pub mod config;

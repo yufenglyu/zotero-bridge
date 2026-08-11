@@ -4,8 +4,8 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 use unicode_normalization::UnicodeNormalization;
-use zsb_core::{build_select_uri, IndexedItem, RemoteLibrary};
-use zsb_zotero_api::{Creator, ZoteroItem};
+use zotero_bridge_core::{build_select_uri, IndexedItem, RemoteLibrary};
+use zotero_bridge_zotero_api::{Creator, ZoteroItem};
 
 /// Item types excluded from the index by default (spec section 10.1).
 pub const EXCLUDED_TYPES: &[&str] = &["attachment", "note", "annotation"];
@@ -94,7 +94,7 @@ pub fn extract_year(date: &str) -> String {
 }
 
 /// Merge the publication-related fields by priority (spec section 10.5).
-pub fn container_title(data: &zsb_zotero_api::ItemData) -> String {
+pub fn container_title(data: &zotero_bridge_zotero_api::ItemData) -> String {
     for candidate in [
         &data.publication_title,
         &data.book_title,
@@ -113,7 +113,7 @@ pub fn container_title(data: &zsb_zotero_api::ItemData) -> String {
     String::new()
 }
 
-fn other_text(data: &zsb_zotero_api::ItemData, keys: &[&str]) -> String {
+fn other_text(data: &zotero_bridge_zotero_api::ItemData, keys: &[&str]) -> String {
     for key in keys {
         if let Some(value) = data.other.get(*key) {
             let text = match value {
@@ -129,7 +129,7 @@ fn other_text(data: &zsb_zotero_api::ItemData, keys: &[&str]) -> String {
     String::new()
 }
 
-fn display_title(data: &zsb_zotero_api::ItemData, key: &str) -> String {
+fn display_title(data: &zotero_bridge_zotero_api::ItemData, key: &str) -> String {
     for candidate in [
         clean_text(&data.title),
         other_text(data, &["nameOfAct", "caseName", "billTitle", "subject"]),
@@ -237,7 +237,7 @@ pub fn normalize_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zsb_core::RemoteLibrary;
+    use zotero_bridge_core::RemoteLibrary;
 
     #[test]
     fn year_extraction() {

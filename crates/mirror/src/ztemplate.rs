@@ -12,7 +12,7 @@
 //! Zotero `data` object), with fallbacks to the normalized IndexedItem
 //! columns when raw JSON is unavailable.
 
-use zsb_core::IndexedItem;
+use zotero_bridge_core::IndexedItem;
 
 /// Whether a template uses Zotero `{{...}}` syntax (vs the legacy
 /// `{placeholder}` syntax).

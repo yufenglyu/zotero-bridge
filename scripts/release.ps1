@@ -5,7 +5,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -SkipBuild
 #
 # Artifacts go to target\dist\:
-#   zotero-bridge-portable-v<version>-windows-x64.zip   portable (no-install) package
+#   zotero-bridge-portable-v<version>-windows-x64.zip   portable desktop package
 #   *.msi / *-setup.exe                       installers (if previously built via tauri build)
 #
 # Release: attach files under target\dist\ to a GitHub Release, or push a tag
@@ -40,8 +40,8 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "frontend build failed" }
     Pop-Location
 
-    Write-Host "==> Building Rust release (zotero-bridge + zotero-bridge-desktop)"
-    cargo build --release -p zotero-bridge -p zotero-bridge-desktop
+    Write-Host "==> Building Rust release (zotero-bridge)"
+    cargo build --release -p zotero-bridge
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 }
 
@@ -54,7 +54,6 @@ New-Item -ItemType Directory -Force -Path $Stage, $Dist | Out-Null
 
 Write-Host "==> Assembling portable package"
 Copy-Item (Join-Path $CargoTarget "release\zotero-bridge.exe") $Stage
-Copy-Item (Join-Path $CargoTarget "release\zotero-bridge-desktop.exe") $Stage
 # Static portable assets live in packaging\portable\ and are tracked in git.
 if (-not (Test-Path (Join-Path $PortableAssets "zotero-bridge-config.toml"))) {
     throw "packaging\portable\zotero-bridge-config.toml missing. Restore with: git checkout -- packaging"
