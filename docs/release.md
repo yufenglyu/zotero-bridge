@@ -16,7 +16,7 @@ npx tauri build
 Windows 本地发布产物：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\release.ps1
+powershell -ExecutionPolicy Bypass -File scripts\release-windows.ps1
 ```
 
 macOS 本地发布产物：
@@ -36,7 +36,7 @@ NSIS 安装器按当前用户安装（`installMode: currentUser`），无需管�
 - `.github/workflows/release.yml`：推送 `v*` 标签时构建 Windows zip、
   Windows 桌面安装包（NSIS/MSI）和 macOS 通用应用（DMG/app zip），
   并按 `CHANGELOG.md` 中对应版本章节发布正式 GitHub Release。
-  Windows zip 由 `scripts/release.ps1` 生成，macOS 产物由
+  Windows zip 由 `scripts/release-windows.ps1` 生成，macOS 产物由
   `scripts/release-macos.sh` 生成，最终只上传 `target/dist/` 下的成品。
 
 ## Windows 签名

@@ -47,7 +47,7 @@ jobs:
 
       - name: Build portable package
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File scripts\release.ps1
+        run: powershell -ExecutionPolicy Bypass -File scripts\release-windows.ps1
 
       - name: Build Windows installers
         working-directory: apps/desktop

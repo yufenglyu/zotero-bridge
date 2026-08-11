@@ -1,8 +1,8 @@
 # Zotero Bridge - build & package script
 #
 # Usage (from repo root):
-#   powershell -ExecutionPolicy Bypass -File scripts\release.ps1
-#   powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -SkipBuild
+#   powershell -ExecutionPolicy Bypass -File scripts\release-windows.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\release-windows.ps1 -SkipBuild
 #
 # Artifacts go to target\dist\:
 #   zotero-bridge-portable-v<version>-windows-x64.zip   portable desktop package
