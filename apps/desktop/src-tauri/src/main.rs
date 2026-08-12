@@ -454,6 +454,15 @@ fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn browse_prefs_source(default_dir: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new().add_filter("Zotero prefs.js", &["js"]);
+    if let Some(dir) = dialog_start_dir(default_dir) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.pick_file().map(|p| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 fn browse_backup_file(default_dir: Option<String>) -> Option<String> {
     let mut dialog = rfd::FileDialog::new()
         .add_filter("Zotero Bridge 设置备份", &["json"])
@@ -697,6 +706,7 @@ fn main() {
             restore_zotero_prefs,
             save_zotero_prefs,
             open_dir,
+            browse_prefs_source,
             browse_backup_file,
             browse_restore_file,
             doctor,

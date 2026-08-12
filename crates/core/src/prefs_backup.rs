@@ -547,7 +547,12 @@ fn resolve_prefs_file(path: Option<PathBuf>) -> crate::Result<(PathBuf, PathBuf)
 
 fn read_backup(path: &Path) -> crate::Result<PrefsBackup> {
     let text = std::fs::read_to_string(path)?;
-    serde_json::from_str(&text).map_err(|e| crate::Error::Config(format!("读取备份失败：{e}")))
+    let mut backup: PrefsBackup = serde_json::from_str(&text)
+        .map_err(|e| crate::Error::Config(format!("读取备份失败：{e}")))?;
+    for entry in backup.prefs.iter_mut() {
+        classify(entry);
+    }
+    Ok(backup)
 }
 
 fn parse_prefs(text: &str) -> Vec<ParsedPref> {
@@ -806,7 +811,7 @@ fn is_sensitive_key(key: &str) -> bool {
         || ((key.contains("apikey") || key.contains("api_key")) && !key.contains("localapi"))
 }
 
-fn is_path_pref(key: &str, value: &PrefValue) -> bool {
+fn is_path_pref(_key: &str, value: &PrefValue) -> bool {
     let Some(value) = value.as_str() else {
         return false;
     };
@@ -814,35 +819,28 @@ fn is_path_pref(key: &str, value: &PrefValue) -> bool {
     if trimmed.is_empty() {
         return false;
     }
-    looks_like_path(trimmed) || key_suggests_path(key)
-}
-
-fn key_suggests_path(key: &str) -> bool {
-    [
-        "path",
-        "dir",
-        "directory",
-        "folder",
-        "file",
-        "storage",
-        "location",
-        "library",
-        "datadir",
-        "cache",
-        "export",
-        "import",
-        "backup",
-    ]
-    .iter()
-    .any(|term| key.contains(term))
+    looks_like_path(trimmed)
 }
 
 fn looks_like_path(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("zotero://")
+        || value.starts_with('{')
+        || value.starts_with('[')
+    {
+        return false;
+    }
     let b = value.as_bytes();
     (b.len() >= 3 && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
         || value.starts_with("~/")
         || value.starts_with("/Users/")
         || value.starts_with("/Volumes/")
+        || value.starts_with("/home/")
+        || value.starts_with("/mnt/")
+        || value.starts_with("/media/")
+        || value.starts_with("/tmp/")
         || value.starts_with("file:///")
         || value.starts_with("\\\\")
 }
@@ -1054,6 +1052,67 @@ user_pref("extensions.zotero.night.enabled", true);
             assert_ne!(pref.entry.scope, PrefScope::Plugin, "{}", pref.entry.key);
             assert!(pref.entry.plugin.is_none(), "{}", pref.entry.key);
         }
+    }
+
+    #[test]
+    fn path_detection_rejects_non_path_values_with_path_like_keys() {
+        let text = r#"
+user_pref("extensions.zotero.export.bibliographySettings", "{\"mode\":\"bibliography\",\"method\":\"copy-to-clipboard\"}");
+user_pref("extensions.zotero.export.lastLocale", "en-US");
+user_pref("extensions.zotero.export.lastStyle", "http://www.zotero.org/styles/elsevier-harvard");
+user_pref("extensions.zotero.export.quickCopy.setting", "bibliography=http://www.zotero.org/styles/apa");
+user_pref("extensions.zotero.lastViewedFolder", "L1");
+user_pref("extensions.zotero.secondarySort.archiveLocation", "itemType");
+user_pref("extensions.zotero.zoteroattanger.filetypes", "pdf,djvu,epub,doc,docx,ppt,pptx,xls,xlsx");
+user_pref("extensions.zotero.zoteroattanger.dest_dir", "D:\\OneDrive\\Obsidian\\附件\\Zotero\\PDF");
+"#;
+        let prefs = parse_prefs(text);
+        let paths: Vec<_> = prefs
+            .iter()
+            .filter(|p| p.entry.kind == PrefKind::Path)
+            .map(|p| p.entry.key.as_str())
+            .collect();
+        assert_eq!(paths, vec!["extensions.zotero.zoteroattanger.dest_dir"]);
+    }
+
+    #[test]
+    fn loading_backup_reclassifies_stale_path_kinds() {
+        let root = unique_test_dir("prefs-reclassify-backup");
+        std::fs::create_dir_all(&root).unwrap();
+        let backup_file = root.join("backup.json");
+        std::fs::write(
+            &backup_file,
+            r#"{
+  "format_version": 1,
+  "app": "Zotero Bridge",
+  "created_at": "test",
+  "profile": "test",
+  "prefs": [
+    {
+      "key": "extensions.zotero.export.lastLocale",
+      "value": "en-US",
+      "kind": "path",
+      "scope": "zotero",
+      "plugin": null
+    },
+    {
+      "key": "extensions.zotero.zoteroattanger.dest_dir",
+      "value": "D:\\OneDrive\\Zotero\\PDF",
+      "kind": "portable",
+      "scope": "plugin",
+      "plugin": "zoteroattanger"
+    }
+  ],
+  "skipped": []
+}"#,
+        )
+        .unwrap();
+
+        let backup = load_backup(&backup_file).unwrap();
+        assert_eq!(backup.prefs[0].kind, PrefKind::Portable);
+        assert_eq!(backup.prefs[1].kind, PrefKind::Path);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

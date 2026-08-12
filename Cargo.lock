@@ -5644,7 +5644,7 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zotero-bridge"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rfd",
  "serde",
@@ -5666,7 +5666,7 @@ dependencies = [
 
 [[package]]
 name = "zotero-bridge-core"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -5678,7 +5678,7 @@ dependencies = [
 
 [[package]]
 name = "zotero-bridge-index"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rusqlite",
  "serde_json",
@@ -5689,7 +5689,7 @@ dependencies = [
 
 [[package]]
 name = "zotero-bridge-launcher"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "open",
  "thiserror 2.0.19",
@@ -5698,7 +5698,7 @@ dependencies = [
 
 [[package]]
 name = "zotero-bridge-mirror"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "regex",
  "serde_json",
@@ -5710,7 +5710,7 @@ dependencies = [
 
 [[package]]
 name = "zotero-bridge-sync"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "regex",
  "serde_json",
@@ -5728,7 +5728,7 @@ dependencies = [
 
 [[package]]
 name = "zotero-bridge-zotero-api"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "reqwest 0.12.28",
  "serde",

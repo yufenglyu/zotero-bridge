@@ -20,6 +20,7 @@ import {
   Sun,
   Terminal,
   Trash2,
+  X,
 } from "@lucide/vue";
 
 interface LibraryView {
@@ -179,11 +180,12 @@ const prefsDraftSource = ref<"current" | "backup">("current");
 const groupKindFilters = ref<Record<string, string>>({});
 const groupSearchFilters = ref<Record<string, string>>({});
 const expandedPrefGroups = ref<string[]>([]);
-const restorePaths = ref(false);
+const restorePaths = ref(true);
 const pathMigrationOpen = ref(false);
 const pathOverrides = ref<Record<string, string>>({});
 const restorePreview = ref<RestorePreview | null>(null);
 const restoreReport = ref<RestoreReport | null>(null);
+const restoreConfirmOpen = ref(false);
 const busy = ref(false);
 const message = ref("");
 const tauriAvailable = ref(true);
@@ -210,6 +212,26 @@ const currentLinkExtension = computed(() =>
   currentPlatformKey.value === "macos" ? ".webloc" : ".url"
 );
 
+function normalizeLocalPath(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) return path;
+  return currentPlatformKey.value === "windows"
+    ? trimmed.replace(/\//g, "\\")
+    : trimmed.replace(/\\/g, "/");
+}
+
+function normalizePrefsSourcePath() {
+  prefsSourcePath.value = normalizeLocalPath(prefsSourcePath.value);
+}
+
+function normalizePrefsBackupPath() {
+  prefsBackupPath.value = normalizeLocalPath(prefsBackupPath.value);
+}
+
+function normalizePrefsRestorePath() {
+  prefsRestorePath.value = normalizeLocalPath(prefsRestorePath.value);
+}
+
 const activeMirrorConfig = computed(() => {
   if (!config.value) return null;
   return config.value.mirror[currentPlatformKey.value];
@@ -224,6 +246,10 @@ const currentMirrorIssueCount = computed(() => {
   const dir = currentMirrorDirectory.value;
   if (!dir) return 0;
   return dir.missing_files + dir.orphan_files + dir.stale_files;
+});
+
+const enabledLibraryCount = computed(() => {
+  return status.value?.libraries.filter((lib) => lib.enabled).length ?? 0;
 });
 
 function prefMatchesGroupFilters(pref: DraftPrefEntry, groupId: string): boolean {
@@ -491,10 +517,9 @@ async function scanPrefs() {
     });
     if (scan) {
       prefsScan.value = scan;
-      prefsSourcePath.value = scan.prefs_file;
+      prefsSourcePath.value = normalizeLocalPath(scan.prefs_file);
       prefsDraft.value = scan.prefs.map(toDraftPref);
       prefsDraftSource.value = "current";
-      restorePaths.value = false;
       resetPathOverrides();
       pruneExpandedPrefGroups();
       message.value = `已扫描 ${scan.total} 个 Zotero 设置项，可备份 ${scan.exportable} 项。`;
@@ -513,8 +538,8 @@ async function backupPrefs() {
       prefs: activeDraftPrefs.value,
     });
     if (path) {
-      prefsBackupPath.value = path;
-      prefsRestorePath.value = path;
+      prefsBackupPath.value = normalizeLocalPath(path);
+      prefsRestorePath.value = normalizeLocalPath(path);
       message.value = `Zotero 设置已备份：${path}`;
       await scanPrefs();
     }
@@ -536,7 +561,6 @@ async function loadPrefsBackup() {
     if (backup) {
       prefsDraft.value = backup.prefs.map(toDraftPref);
       prefsDraftSource.value = "backup";
-      restorePaths.value = false;
       pathMigrationOpen.value = true;
       resetPathOverrides();
       pruneExpandedPrefGroups();
@@ -565,16 +589,27 @@ async function previewPrefsRestore() {
     if (preview) {
       restorePreview.value = preview;
       restoreReport.value = null;
-      message.value = `恢复预览：新增 ${preview.will_add}，修改 ${preview.will_modify}，路径跳过 ${preview.skipped_paths}。`;
+      message.value = `导入预览：新增 ${preview.will_add}，修改 ${preview.will_modify}，路径跳过 ${preview.skipped_paths}。`;
     }
   } finally {
     busy.value = false;
   }
 }
 
+async function importPrefs() {
+  if (!prefsRestorePath.value.trim()) {
+    message.value = "请先选择要导入的备份文件。";
+    return;
+  }
+  restorePaths.value = true;
+  await loadPrefsBackup();
+  await previewPrefsRestore();
+  if (restorePreview.value) restoreConfirmOpen.value = true;
+}
+
 async function applyPrefsRestore() {
   if (!restorePreview.value || !prefsRestorePath.value.trim()) {
-    message.value = "请先生成恢复预览。";
+    message.value = "请先生成导入预览。";
     return;
   }
   busy.value = true;
@@ -587,7 +622,8 @@ async function applyPrefsRestore() {
     });
     if (report) {
       restoreReport.value = report;
-      message.value = `恢复完成：新增 ${report.added}，修改 ${report.modified}，当前 prefs 已备份。`;
+      restoreConfirmOpen.value = false;
+      message.value = `导入完成：新增 ${report.added}，修改 ${report.modified}，当前 prefs 已备份。`;
       await scanPrefs();
     }
   } finally {
@@ -597,7 +633,7 @@ async function applyPrefsRestore() {
 
 async function savePrefsDraft() {
   if (prefsDraftSource.value === "backup") {
-    message.value = "导入备份请先预览，再应用恢复；写回只用于本机扫描草稿。";
+    message.value = "导入备份请先预览导入，再确认导入；写回只用于本机扫描草稿。";
     return;
   }
   if (!prefsDraft.value.length) {
@@ -620,11 +656,18 @@ async function savePrefsDraft() {
   }
 }
 
+async function browsePrefsSourcePath() {
+  const selected = await safeInvoke<string | null>("browse_prefs_source", {
+    defaultDir: prefsSourcePath.value.trim() || null,
+  });
+  if (selected) prefsSourcePath.value = normalizeLocalPath(selected);
+}
+
 async function browseBackupPath() {
   const selected = await safeInvoke<string | null>("browse_backup_file", {
     defaultDir: prefsSourcePath.value.trim() || null,
   });
-  if (selected) prefsBackupPath.value = selected;
+  if (selected) prefsBackupPath.value = normalizeLocalPath(selected);
 }
 
 async function browseRestorePath() {
@@ -632,7 +675,7 @@ async function browseRestorePath() {
     defaultDir: prefsBackupPath.value.trim() || prefsSourcePath.value.trim() || null,
   });
   if (selected) {
-    prefsRestorePath.value = selected;
+    prefsRestorePath.value = normalizeLocalPath(selected);
     await loadPrefsBackup();
   }
 }
@@ -684,6 +727,10 @@ function removeDraftPref(pref: DraftPrefEntry) {
 
 function filteredGroupItems(group: { id: string; items: DraftPrefEntry[] }): DraftPrefEntry[] {
   return group.items.filter((pref) => prefMatchesGroupFilters(pref, group.id));
+}
+
+function clearGroupSearch(groupId: string) {
+  groupSearchFilters.value[groupId] = "";
 }
 
 function pruneExpandedPrefGroups() {
@@ -821,32 +868,13 @@ onUnmounted(() => {
               <div class="overview-card">
                 <span>Zotero 实例</span>
                 <strong>{{ status.instance || "未知" }}</strong>
-                <small>{{ status.library_count }} 个文献库 · 排除附件、笔记、批注</small>
+                <small>排除附件、笔记、批注</small>
               </div>
-            </div>
-            <section class="overview-block">
-              <h4>文献库状态</h4>
-              <div class="library-table compact-library-table">
-                <div
-                  v-for="lib in status.libraries"
-                  :key="lib.kind + lib.zotero_library_id"
-                  class="library-row compact-library-row"
-                >
-                  <span class="tag">{{ lib.kind }}</span>
-                  <strong>{{ lib.display_name }}</strong>
-                  <em>id={{ lib.zotero_library_id }}</em>
-                  <em>版本 {{ lib.last_version }}</em>
-                  <span class="state" :class="{ off: !lib.enabled }">
-                    {{ lib.enabled ? "启用" : "停用" }}
-                  </span>
-                  <p v-if="lib.last_error">{{ lib.last_error }}</p>
-                </div>
+              <div class="overview-card library-overview-card">
+                <span>文献库状态</span>
+                <strong>{{ status.library_count.toLocaleString() }}</strong>
+                <small>已启用 {{ enabledLibraryCount }} / {{ status.library_count }}</small>
               </div>
-            </section>
-            <div class="queue-strip">
-              <span>任务队列</span>
-              <strong>待写入 {{ status.pending_jobs.toLocaleString() }}</strong>
-              <strong :class="{ warn: status.failed_jobs > 0 }">失败 {{ status.failed_jobs.toLocaleString() }}</strong>
             </div>
             <div class="toolbar">
               <button
@@ -882,23 +910,19 @@ onUnmounted(() => {
                 <p>配置当前系统的链接文件目录、命名模板和 URI 模板；文件数量与任务状态在运行概览中查看。</p>
               </div>
             </div>
-            <div v-if="currentMirrorDirectory" class="mirror-table">
-              <div class="mirror-row mirror-directory-row">
-                <div class="mirror-directory">
-                  <strong>目录设置</strong>
-                  <input
-                    type="text"
-                    v-model="activeMirrorConfig.directory"
-                    spellcheck="false"
-                    @change="autoSaveConfig"
-                    @blur="autoSaveConfig"
-                    @keyup.enter="autoSaveConfig"
-                  />
-                  <button type="button" class="compact-icon" title="打开链接文件目录" @click="openDir('mirror')">
-                    <FolderOpen class="icon" />
-                  </button>
-                </div>
-              </div>
+            <div class="mirror-directory-inline">
+              <strong>目录设置</strong>
+              <input
+                type="text"
+                v-model="activeMirrorConfig.directory"
+                spellcheck="false"
+                @change="autoSaveConfig"
+                @blur="autoSaveConfig"
+                @keyup.enter="autoSaveConfig"
+              />
+              <button type="button" class="compact-icon" title="打开链接文件目录" @click="openDir('mirror')">
+                <FolderOpen class="icon" />
+              </button>
             </div>
             <div class="link-settings-stack">
               <section class="settings-section compact-section">
@@ -969,10 +993,16 @@ onUnmounted(() => {
 
             <div class="backup-actions">
               <label class="field wide">
-                <span>源配置</span>
-                <input type="text" v-model="prefsSourcePath" placeholder="填写 prefs.js 文件或 Zotero profile 目录" />
-                <button type="button" :disabled="busy" @click="scanPrefs">
-                  <RefreshCw class="icon" />扫描
+                <span>本机配置</span>
+                <input
+                  type="text"
+                  v-model="prefsSourcePath"
+                  placeholder="本机 prefs.js 文件或 Zotero profile 目录（备份源 / 导入目标）"
+                  @blur="normalizePrefsSourcePath"
+                  @keyup.enter="normalizePrefsSourcePath"
+                />
+                <button type="button" :disabled="busy" @click="browsePrefsSourcePath">
+                  <FolderOpen class="icon" />浏览
                 </button>
                 <button type="button" :disabled="busy || prefsDraftSource === 'backup'" @click="savePrefsDraft">
                   <Save class="icon" />写回
@@ -980,7 +1010,13 @@ onUnmounted(() => {
               </label>
               <label class="field wide">
                 <span>备份文件</span>
-                <input type="text" v-model="prefsBackupPath" placeholder="留空则保存到 Zotero profile" />
+                <input
+                  type="text"
+                  v-model="prefsBackupPath"
+                  placeholder="留空则保存到 Zotero profile"
+                  @blur="normalizePrefsBackupPath"
+                  @keyup.enter="normalizePrefsBackupPath"
+                />
                 <button type="button" :disabled="busy" @click="browseBackupPath">
                   <FolderOpen class="icon" />浏览
                 </button>
@@ -990,12 +1026,18 @@ onUnmounted(() => {
               </label>
               <label class="field wide">
                 <span>导入文件</span>
-                <input type="text" v-model="prefsRestorePath" placeholder="填写 zotero-bridge-prefs-backup-*.json" />
+                <input
+                  type="text"
+                  v-model="prefsRestorePath"
+                  placeholder="选择 zotero-bridge-prefs-backup-*.json"
+                  @blur="normalizePrefsRestorePath"
+                  @keyup.enter="normalizePrefsRestorePath"
+                />
                 <button type="button" :disabled="busy" @click="browseRestorePath">
                   <FolderOpen class="icon" />浏览
                 </button>
-                <button type="button" :disabled="busy" @click="previewPrefsRestore">
-                  <RefreshCw class="icon" />预览
+                <button type="button" class="primary" :disabled="busy" @click="importPrefs">
+                  <RotateCcw class="icon" />导入
                 </button>
               </label>
             </div>
@@ -1005,10 +1047,15 @@ onUnmounted(() => {
         <section class="panel settings-card">
           <div class="panel-head">
             <div>
-              <h3><BookOpen class="icon" />设置分组</h3>
+              <h3><BookOpen class="icon" />设置详览</h3>
               <p>{{ prefsDraftSource === "backup" ? "当前显示导入备份中的设置项。" : "当前显示本机 Zotero 可备份设置项。" }}编辑和删除会先进入草稿，点击写回后更新源 prefs.js。</p>
             </div>
-            <div class="pref-count">{{ visiblePrefCount }} / {{ activeDraftPrefs.length }}</div>
+            <div class="panel-actions">
+              <button type="button" :disabled="busy" @click="scanPrefs">
+                <RefreshCw class="icon" />刷新
+              </button>
+              <div class="pref-count">{{ visiblePrefCount }} / {{ activeDraftPrefs.length }}</div>
+            </div>
           </div>
           <div class="pref-groups">
             <div v-for="group in groupedPrefs" :key="group.id" class="pref-group">
@@ -1026,7 +1073,18 @@ onUnmounted(() => {
                     <option value="path">路径项</option>
                     <option value="unknown">未知项</option>
                   </select>
-                  <input type="text" v-model="groupSearchFilters[group.id]" placeholder="在当前分组中搜索 key 或 value" />
+                  <div class="search-input-wrap">
+                    <input type="text" v-model="groupSearchFilters[group.id]" placeholder="在当前分组中搜索 key 或 value" />
+                    <button
+                      v-if="groupSearchFilters[group.id]"
+                      type="button"
+                      class="clear-search-button"
+                      title="清空搜索"
+                      @click="clearGroupSearch(group.id)"
+                    >
+                      <X class="icon" />
+                    </button>
+                  </div>
                 </div>
                 <div class="pref-row pref-head">
                   <span>类型</span>
@@ -1054,7 +1112,6 @@ onUnmounted(() => {
               <p>导入备份时逐项核对路径设置；填写新路径后，预览和恢复会用新路径覆盖备份中的旧路径。</p>
             </div>
             <div class="toolbar compact">
-              <label class="check inline-check"><input type="checkbox" v-model="restorePaths" />导入未修改的路径项</label>
               <button type="button" :disabled="!pathMigrationItems.length" @click="pathMigrationOpen = !pathMigrationOpen">
                 {{ pathMigrationOpen ? "收起列表" : "展开列表" }}
               </button>
@@ -1074,27 +1131,6 @@ onUnmounted(() => {
           </div>
           <div v-else class="template-box compact-template">
             当前草稿中没有路径项。
-          </div>
-        </section>
-
-        <section v-if="restorePreview" class="panel settings-card">
-          <h3><RotateCcw class="icon" />恢复预览</h3>
-          <div class="preview-strip">
-            <span>新增 <strong>{{ restorePreview.will_add }}</strong></span>
-            <span>修改 <strong>{{ restorePreview.will_modify }}</strong></span>
-            <span>不变 <strong>{{ restorePreview.unchanged }}</strong></span>
-            <span>路径跳过 <strong>{{ restorePreview.skipped_paths }}</strong></span>
-          </div>
-          <div v-if="restorePreview.path_items.length" class="path-list">
-            <div v-for="item in restorePreview.path_items.slice(0, 6)" :key="item.key">
-              <strong>{{ item.plugin || item.scope }}</strong>
-              <span>{{ item.key }}</span>
-            </div>
-          </div>
-          <div class="toolbar compact">
-            <button class="primary" :disabled="busy" @click="applyPrefsRestore">
-              <RotateCcw class="icon" />应用恢复
-            </button>
           </div>
         </section>
 
@@ -1168,12 +1204,49 @@ onUnmounted(() => {
       </section>
     </div>
 
+    <div v-if="restoreConfirmOpen && restorePreview" class="modal-backdrop" @click.self="restoreConfirmOpen = false">
+      <section class="modal-panel restore-modal">
+        <div class="panel-head">
+          <div>
+            <h3><RotateCcw class="icon" />导入预览</h3>
+            <p>确认后会把导入文件中的设置写入本机 prefs.js，并自动备份当前 prefs。</p>
+          </div>
+          <button type="button" @click="restoreConfirmOpen = false">关闭</button>
+        </div>
+        <div class="preview-strip">
+          <span>新增 <strong>{{ restorePreview.will_add }}</strong></span>
+          <span>修改 <strong>{{ restorePreview.will_modify }}</strong></span>
+          <span>不变 <strong>{{ restorePreview.unchanged }}</strong></span>
+          <span>路径跳过 <strong>{{ restorePreview.skipped_paths }}</strong></span>
+        </div>
+        <label class="check inline-check restore-path-check">
+          <input type="checkbox" v-model="restorePaths" @change="previewPrefsRestore" />
+          导入路径设置项
+        </label>
+        <div v-if="restorePreview.path_items.length" class="path-list">
+          <div v-for="item in restorePreview.path_items.slice(0, 6)" :key="item.key">
+            <strong>{{ item.plugin || item.scope }}</strong>
+            <span>{{ item.key }}</span>
+          </div>
+        </div>
+        <div class="toolbar compact modal-actions">
+          <button type="button" @click="restoreConfirmOpen = false">取消</button>
+          <button class="primary" :disabled="busy" @click="applyPrefsRestore">
+            <RotateCcw class="icon" />确认导入
+          </button>
+        </div>
+      </section>
+    </div>
+
     <footer class="statusbar">
       <span class="statusbar-item" :class="connectionTone">
         <b></b>{{ connectionLabel }}
       </span>
       <span class="statusbar-item">
         <Database class="icon" />{{ status ? status.item_count.toLocaleString() : 0 }} 条索引
+      </span>
+      <span v-if="status" class="statusbar-item" :class="{ warn: status.failed_jobs > 0 }">
+        <Activity class="icon" />待写入 {{ status.pending_jobs.toLocaleString() }} · 失败 {{ status.failed_jobs.toLocaleString() }}
       </span>
       <span class="statusbar-message">{{ footerMessage }}</span>
       <button class="statusbar-button" @click="openDir('logs')">
